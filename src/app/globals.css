@@ -1,0 +1,569 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-body: 'DM Sans', sans-serif;
+  --font-sora: 'Sora', sans-serif;
+  --font-nav: 'Outfit', sans-serif;
+  --font-signature: 'Caveat', cursive;
+}
+
+body {
+  @apply bg-cream text-charcoal;
+  font-family: var(--font-body);
+  background: linear-gradient(180deg, #FDFBF7 0%, #FFFFFF 50%, #FDFBF7 100%);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  
+  .font-display {
+    font-family: var(--font-sora);
+    letter-spacing: -0.02em;
+  }
+  
+  .font-body {
+    font-family: var(--font-body);
+    letter-spacing: -0.01em;
+  }
+  
+  .font-nav {
+    font-family: var(--font-nav);
+    letter-spacing: -0.005em;
+  }
+  
+  .font-signature {
+    font-family: var(--font-signature);
+    letter-spacing: 0.02em;
+  }
+  
+  .glass-morphism {
+    background: rgba(253, 251, 247, 0.8);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  /* Navbar — frosted glass on scroll */
+  .nav-glass {
+    background: rgba(255, 255, 255, 0.65);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.55);
+    box-shadow:
+      0 4px 24px rgba(30, 58, 95, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  }
+
+  .nav-glass-dark {
+    background: rgba(15, 23, 42, 0.35);
+    backdrop-filter: blur(16px) saturate(160%);
+    -webkit-backdrop-filter: blur(16px) saturate(160%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  }
+
+  .nav-glass-menu {
+    background: rgba(255, 255, 255, 0.78);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border-top: 1px solid rgba(255, 255, 255, 0.6);
+    box-shadow: 0 12px 40px rgba(30, 58, 95, 0.1);
+  }
+  
+  .gradient-soft {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(253, 251, 247, 0.95) 100%);
+  }
+  
+  .skeu-card {
+    @apply bg-white rounded-4xl shadow-skeu-md;
+    background: linear-gradient(145deg, #ffffff 0%, #fdfbf7 100%);
+    border: 1px solid rgba(255, 255, 255, 0.8);
+  }
+  
+  .skeu-button {
+    @apply rounded-full shadow-skeu-sm transition-all duration-200;
+    background: linear-gradient(145deg, #ffffff 0%, #f8f6f2 100%);
+    border: 1px solid rgba(0, 0, 0, 0.05);
+  }
+  
+  .skeu-button:hover {
+    @apply shadow-skeu-md;
+    transform: translateY(-2px);
+  }
+  
+  .skeu-button:active {
+    @apply shadow-inner-soft;
+    transform: translateY(0) scale(0.98);
+  }
+  
+  .dough-button {
+    @apply relative overflow-hidden;
+    transition: transform 0.1s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  
+  .dough-button:active {
+    transform: scale(0.95);
+  }
+  
+  .scroll-fade {
+    animation: fadeInUp 0.8s ease-out forwards;
+    opacity: 0;
+  }
+  
+  .animate-gradient-slow {
+    background-size: 200% 200%;
+    animation: gradientShift 15s ease infinite;
+  }
+
+  .animate-scroll-cue {
+    animation: scrollCue 2s ease-in-out infinite;
+  }
+
+  .animate-scroll-dot {
+    animation: scrollDot 2s ease-in-out infinite;
+  }
+
+  .animate-fade-up {
+    animation: fadeUpFast 0.35s ease-out forwards;
+    opacity: 0;
+  }
+
+  .animate-fade-in {
+    animation: fadeInFast 0.2s ease-out forwards;
+  }
+
+  .stagger-1 { animation-delay: 0.04s; }
+  .stagger-2 { animation-delay: 0.08s; }
+  .stagger-3 { animation-delay: 0.12s; }
+  .stagger-4 { animation-delay: 0.16s; }
+  .stagger-5 { animation-delay: 0.22s; }
+
+  .content-auto {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 600px;
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeUpFast {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInFast {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes gradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes scrollCue {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(4px);
+  }
+}
+
+@keyframes scrollDot {
+  0%, 100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  50% {
+    transform: translateY(6px);
+    opacity: 0.3;
+  }
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Custom scrollbar - Thin & Modern */
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d97757;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #c66647;
+}
+
+/* Selection color */
+::selection {
+  background-color: #d97757;
+  color: white;
+}
+
+/* Focus styles - accessibilité clavier */
+:focus {
+  outline: none;
+}
+:focus-visible {
+  outline: 2px solid #1E3A5F;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+a:focus-visible,
+button:focus-visible {
+  outline: 2px solid #1E3A5F;
+  outline-offset: 2px;
+}
+
+/* Contraste : valider avec axe DevTools ou WAVE si vous changez les couleurs (texte sur fond, dégradés). */
+
+/* ------------------------------------------------------------------ */
+/* Admin 2026 — « La Régie » : console sombre, verre et lumière scène */
+/* ------------------------------------------------------------------ */
+@layer components {
+  .admin-shell {
+    @apply min-h-screen;
+    color: #e9edf5;
+    color-scheme: dark;
+    background:
+      radial-gradient(ellipse 70% 45% at 88% -8%, rgba(42, 157, 143, 0.16), transparent 58%),
+      radial-gradient(ellipse 55% 42% at -5% 2%, rgba(30, 58, 95, 0.45), transparent 55%),
+      radial-gradient(ellipse 65% 45% at 50% 112%, rgba(231, 111, 81, 0.07), transparent 60%),
+      #0a0d14;
+  }
+
+  .admin-card {
+    @apply rounded-2xl;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.055) 0%, rgba(255, 255, 255, 0.028) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.06),
+      0 12px 32px rgba(0, 0, 0, 0.35);
+  }
+
+  .admin-card-soft {
+    @apply rounded-2xl;
+    background: rgba(13, 17, 26, 0.78);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(16px) saturate(140%);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  }
+
+  .admin-kpi {
+    @apply admin-card p-5 relative overflow-hidden transition-all duration-200;
+  }
+
+  .admin-kpi:hover {
+    transform: translateY(-1px);
+    border-color: rgba(255, 255, 255, 0.16);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      0 16px 40px rgba(0, 0, 0, 0.45);
+  }
+
+  .admin-input {
+    @apply w-full px-3.5 py-2.5 rounded-xl text-sm transition-all duration-200;
+    color: #e9edf5;
+    background: rgba(255, 255, 255, 0.045);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .admin-input::placeholder {
+    color: rgba(233, 237, 245, 0.35);
+  }
+
+  .admin-input:hover {
+    border-color: rgba(45, 212, 191, 0.3);
+  }
+
+  .admin-input:focus {
+    @apply outline-none;
+    background: rgba(255, 255, 255, 0.07);
+    border-color: rgba(45, 212, 191, 0.55);
+    box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.14);
+  }
+
+  .admin-input option {
+    background: #10141d;
+    color: #e9edf5;
+  }
+
+  .admin-btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl text-sm font-semibold font-nav
+      transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .admin-btn-primary {
+    @apply admin-btn px-5 py-2.5 text-white;
+    background: linear-gradient(135deg, #2a9d8f 0%, #1e3a5f 120%);
+    border: 1px solid rgba(45, 212, 191, 0.35);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.18),
+      0 6px 20px rgba(42, 157, 143, 0.3);
+  }
+
+  .admin-btn-primary:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.2),
+      0 10px 26px rgba(42, 157, 143, 0.4);
+  }
+
+  .admin-btn-ghost {
+    @apply admin-btn px-4 py-2.5;
+    color: #e9edf5;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .admin-btn-ghost:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.09);
+    border-color: rgba(45, 212, 191, 0.35);
+  }
+
+  .admin-badge {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold tracking-wide;
+  }
+
+  .admin-badge-pending {
+    @apply admin-badge;
+    color: #fcd34d;
+    background: rgba(245, 176, 76, 0.12);
+    border: 1px solid rgba(245, 176, 76, 0.3);
+  }
+
+  .admin-badge-confirmed {
+    @apply admin-badge;
+    color: #5eead4;
+    background: rgba(45, 212, 191, 0.1);
+    border: 1px solid rgba(45, 212, 191, 0.3);
+  }
+
+  .admin-badge-completed {
+    @apply admin-badge;
+    color: #7dd3fc;
+    background: rgba(56, 189, 248, 0.1);
+    border: 1px solid rgba(56, 189, 248, 0.28);
+  }
+
+  .admin-badge-cancelled {
+    @apply admin-badge;
+    color: #fda4af;
+    background: rgba(251, 113, 133, 0.1);
+    border: 1px solid rgba(251, 113, 133, 0.28);
+  }
+
+  .admin-badge-neutral {
+    @apply admin-badge;
+    color: rgba(233, 237, 245, 0.45);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .admin-sidebar-link {
+    @apply flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold font-nav
+      transition-all duration-200 cursor-pointer;
+  }
+
+  .admin-page-title {
+    @apply text-2xl sm:text-3xl font-display font-bold tracking-tight;
+    color: #f4f6fb;
+  }
+
+  .admin-page-subtitle {
+    @apply text-sm mt-1;
+    color: rgba(233, 237, 245, 0.48);
+  }
+
+  .admin-eyebrow {
+    @apply text-[11px] font-bold uppercase tracking-[0.18em] mb-1.5;
+    color: rgba(94, 234, 212, 0.75);
+  }
+
+  /* Pulse du jour — piste d'occupation par studio */
+  .admin-track {
+    @apply relative h-9 rounded-lg overflow-hidden;
+    background:
+      repeating-linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0.04) 0,
+        rgba(255, 255, 255, 0.04) 1px,
+        transparent 1px,
+        transparent 12.5%
+      ),
+      rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+  }
+
+  .admin-track-seg {
+    @apply absolute inset-y-1 rounded-md;
+  }
+
+  .admin-track-seg-pending {
+    background: linear-gradient(180deg, rgba(245, 176, 76, 0.75), rgba(245, 176, 76, 0.45));
+    box-shadow: 0 0 12px rgba(245, 176, 76, 0.35);
+  }
+
+  .admin-track-seg-confirmed {
+    background: linear-gradient(180deg, rgba(45, 212, 191, 0.8), rgba(42, 157, 143, 0.5));
+    box-shadow: 0 0 12px rgba(45, 212, 191, 0.35);
+  }
+
+  .admin-track-seg-completed {
+    background: linear-gradient(180deg, rgba(56, 189, 248, 0.4), rgba(56, 189, 248, 0.2));
+  }
+
+  .admin-track-now {
+    @apply absolute inset-y-0 w-px;
+    background: #e76f51;
+    box-shadow: 0 0 8px rgba(231, 111, 81, 0.9);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-kpi,
+  .admin-btn-primary,
+  .admin-sidebar-link {
+    transition: none !important;
+  }
+  .admin-kpi:hover,
+  .admin-btn-primary:hover:not(:disabled) {
+    transform: none;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Booking Soft UI Evolution (2026) — public reservation flow         */
+/* ------------------------------------------------------------------ */
+@layer components {
+  .book-shell {
+    @apply relative min-h-screen;
+    background:
+      radial-gradient(ellipse 70% 45% at 10% 0%, rgba(30, 58, 95, 0.07), transparent 55%),
+      radial-gradient(ellipse 55% 40% at 90% 10%, rgba(42, 157, 143, 0.08), transparent 50%),
+      linear-gradient(180deg, #f7f8fb 0%, #fdfbf7 45%, #f4f6f9 100%);
+  }
+
+  .book-card {
+    @apply rounded-3xl bg-white;
+    border: 1px solid rgba(26, 26, 26, 0.06);
+    box-shadow:
+      0 1px 2px rgba(26, 26, 26, 0.04),
+      0 12px 32px rgba(26, 26, 26, 0.05);
+  }
+
+  .book-input {
+    @apply w-full px-4 py-3 rounded-2xl text-sm text-charcoal transition-all duration-200;
+    background: #f7f8fb;
+    border: 1px solid rgba(26, 26, 26, 0.07);
+  }
+
+  .book-input:hover {
+    border-color: rgba(30, 58, 95, 0.22);
+  }
+
+  .book-input:focus {
+    @apply outline-none bg-white;
+    border-color: rgba(30, 58, 95, 0.45);
+    box-shadow: 0 0 0 3px rgba(30, 58, 95, 0.12);
+  }
+
+  .book-btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl px-7 py-3.5
+      text-sm font-semibold font-nav text-white cursor-pointer
+      transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+    background: linear-gradient(135deg, #1e3a5f 0%, #2a9d8f 100%);
+    box-shadow: 0 8px 22px rgba(30, 58, 95, 0.22);
+  }
+
+  .book-btn-primary:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 12px 28px rgba(30, 58, 95, 0.28);
+  }
+
+  .book-btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl px-6 py-3.5
+      text-sm font-semibold font-nav text-charcoal cursor-pointer
+      transition-all duration-200;
+    background: rgba(255, 255, 255, 0.85);
+    border: 1px solid rgba(26, 26, 26, 0.08);
+  }
+
+  .book-btn-ghost:hover {
+    background: #ffffff;
+    border-color: rgba(30, 58, 95, 0.2);
+  }
+
+  .book-chip {
+    @apply inline-flex items-center justify-center rounded-xl px-3 py-2.5 text-sm font-semibold
+      transition-all duration-200 cursor-pointer min-h-11;
+  }
+
+  .book-chip-active {
+    @apply book-chip text-white;
+    background: #1e3a5f;
+    box-shadow: 0 6px 16px rgba(30, 58, 95, 0.25);
+  }
+
+  .book-chip-idle {
+    @apply book-chip text-charcoal bg-white;
+    border: 1px solid rgba(26, 26, 26, 0.08);
+  }
+
+  .book-chip-idle:hover {
+    border-color: rgba(30, 58, 95, 0.35);
+    background: rgba(30, 58, 95, 0.04);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-up,
+  .animate-fade-in,
+  .animate-gradient-slow,
+  .animate-scroll-cue,
+  .animate-scroll-dot {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .book-btn-primary:hover:not(:disabled) {
+    transform: none;
+  }
+}
