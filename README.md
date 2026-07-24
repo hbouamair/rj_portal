@@ -61,16 +61,15 @@ project and a Resend account.
      `SUPABASE_SECRET_KEY` (Supabase → *Project Settings → API Keys*;
      legacy anon/service_role key names also work)
    - `RESEND_API_KEY` (emails: confirmations, notifications)
-   - `CRON_SECRET` (any long random string — protects the expiry cron)
+   - `CRON_SECRET` (any long random string — protects `/api/cron/*`)
    - `NEXT_PUBLIC_SITE_URL` (used for links inside emails)
    On Vercel, add the same variables in *Project Settings → Environment Variables*.
-5. **Vercel Cron** (hourly):
-   - `/api/cron/expire-bookings` — cancels unpaid bookings past deadline
-   - `/api/cron/send-reminders` — emails client + admin before upcoming sessions
+5. **Vercel Cron** (daily on Hobby plan — `0 7 * * *` ≈ 08:00 Casablanca):
+   - `/api/cron/daily` — expires unpaid bookings + sends session reminders
+   - Individual routes `/api/cron/expire-bookings` and `/api/cron/send-reminders` remain available for manual testing
+   - **Pro plan**: you can switch to hourly (`0 * * * *`) or split into separate crons in `vercel.json`
 6. **Reminder migration** (if DB already exists): run `supabase/reminder-migration.sql` in Supabase SQL Editor.
-   It cancels unpaid bookings past their payment deadline (48h by default,
-   editable in the admin settings) and emails the client.
-6. **Admin dashboard**: log in at `/admin/login`. From there you can confirm /
+7. **Admin dashboard**: log in at `/admin/login`. From there you can confirm /
    cancel bookings (the client is emailed automatically), create manual
    bookings, edit studio prices, opening hours, peak-hour windows
    ("heures pleines"), payment details (PayPal / RIB) and view income stats.
