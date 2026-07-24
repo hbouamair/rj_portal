@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Resend } from "resend";
 import { getContactEmailHtml } from "@/lib/contact-email-template";
 import { CONTACT_EMAIL } from "@/lib/constants";
-
-const resend = new Resend(process.env.RESEND_API_KEY);
+import { getResendClient } from "@/lib/resend-client";
 
 const TO_EMAIL = process.env.CONTACT_TO_EMAIL ?? CONTACT_EMAIL;
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? "RJ Studio <onboarding@resend.dev>";
@@ -40,7 +38,8 @@ function isRateLimited(ip: string): boolean {
 
 export async function POST(request: NextRequest) {
   try {
-    if (!process.env.RESEND_API_KEY) {
+    const resend = getResendClient();
+    if (!resend) {
       console.error("Contact API: RESEND_API_KEY is not configured");
       return NextResponse.json(
         { error: "Le service de contact est temporairement indisponible." },

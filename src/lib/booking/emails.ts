@@ -1,4 +1,4 @@
-import { Resend } from "resend";
+import { getResendClient } from "@/lib/resend-client";
 import { CONTACT_EMAIL } from "@/lib/constants";
 import type { Booking, Settings, Studio } from "./types";
 import { bookingStartUtc } from "./pricing";
@@ -46,7 +46,12 @@ async function send(
     console.error(`Booking emails: ${error}`);
     return { ok: false, error };
   }
-  const resend = new Resend(process.env.RESEND_API_KEY);
+  const resend = getResendClient();
+  if (!resend) {
+    const error = "RESEND_API_KEY manquant dans .env.local";
+    console.error(`Booking emails: ${error}`);
+    return { ok: false, error };
+  }
   const { error } = await resend.emails.send({
     from: FROM_EMAIL,
     to: [to],
