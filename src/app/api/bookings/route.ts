@@ -236,6 +236,16 @@ export async function POST(request: NextRequest) {
           { status: 409 }
         );
       }
+      if (lastError?.code === "42501") {
+        console.error("Booking insert error (RLS):", lastError);
+        return NextResponse.json(
+          {
+            error:
+              "Configuration serveur incorrecte. Sur Vercel, vérifiez que SUPABASE_SECRET_KEY est la clé secret (sb_secret_…), pas la clé anon (eyJ…).",
+          },
+          { status: 503 }
+        );
+      }
       console.error("Booking insert error:", lastError);
       return NextResponse.json(
         { error: "Impossible de créer la réservation. Réessayez plus tard." },

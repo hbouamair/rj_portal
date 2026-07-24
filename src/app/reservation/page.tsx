@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import BookingWizard from "@/components/booking/BookingWizard";
+import SupabaseLoadError from "@/components/SupabaseLoadError";
 import { fetchActiveStudios, fetchSettings } from "@/lib/booking/db";
 
 export const metadata: Metadata = {
@@ -60,12 +61,13 @@ export default async function ReservationPage() {
           </header>
 
           {error || !settings ? (
-            <div className="book-card max-w-lg mx-auto p-8 text-center">
-              <p className="text-sm text-soft-charcoal leading-relaxed">
-                {error ??
-                  "Le système de réservation n'est pas encore prêt. Réessayez dans un instant."}
-              </p>
-            </div>
+            <SupabaseLoadError
+              title="Réservation indisponible"
+              message={
+                error ??
+                "Le système de réservation n'est pas encore prêt. Réessayez dans un instant."
+              }
+            />
           ) : (
             <BookingWizard studios={studios} settings={settings} />
           )}

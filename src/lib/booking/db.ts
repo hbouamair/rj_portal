@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { getSupabasePublic } from "@/lib/supabase/public";
 import type { Booking, Settings, Studio } from "./types";
 import type { BusyInterval } from "./pricing";
 import { bookingStartUtc, nowInStudioTime } from "./pricing";
@@ -36,7 +37,7 @@ export function generateBookingReference(): string {
 }
 
 export async function fetchActiveStudios(
-  client: SupabaseClient = getSupabaseAdmin()
+  client: SupabaseClient = getSupabasePublic()
 ): Promise<Studio[]> {
   const { data, error } = await client
     .from("studios")
@@ -59,7 +60,7 @@ export async function fetchAllStudios(
 }
 
 export async function fetchSettings(
-  client: SupabaseClient = getSupabaseAdmin()
+  client: SupabaseClient = getSupabasePublic()
 ): Promise<Settings> {
   const { data, error } = await client
     .from("settings")

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import StudiosShowcase from "@/components/studios/StudiosShowcase";
+import SupabaseLoadError from "@/components/SupabaseLoadError";
 import { fetchActiveStudios, fetchSettings } from "@/lib/booking/db";
 
 export const metadata: Metadata = {
@@ -50,12 +51,12 @@ export default async function StudiosPage() {
                   Nos studios
                 </h1>
               </header>
-              <div className="book-card max-w-lg mx-auto p-8 text-center">
-                <p className="text-sm text-soft-charcoal leading-relaxed">
-                  {error ??
-                    "Les informations des studios ne sont pas disponibles pour le moment."}
-                </p>
-              </div>
+              <SupabaseLoadError
+                message={
+                  error ??
+                  "Les informations des studios ne sont pas disponibles pour le moment."
+                }
+              />
             </>
           ) : (
             <StudiosShowcase studios={studios} settings={settings} />
