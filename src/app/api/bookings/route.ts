@@ -15,9 +15,16 @@ import {
 import {
   expireStalePendingBookings,
   fetchBusySlots,
+  fetchPromoByCode,
   fetchSettings,
   generateBookingReference,
+  incrementPromoUses,
 } from "@/lib/booking/db";
+import {
+  calculatePromoDiscount,
+  normalizePromoCode,
+  validatePromoForBooking,
+} from "@/lib/booking/promo";
 import {
   sendAdminNewBookingEmail,
   sendBookingReceivedEmail,
@@ -55,6 +62,7 @@ interface CreateBookingBody {
   phone: string;
   note?: string;
   paymentMethod: PaymentMethod;
+  promoCode?: string;
 }
 
 function validate(body: unknown): { ok: true; data: CreateBookingBody } | { ok: false; error: string } {
@@ -93,6 +101,11 @@ function validate(body: unknown): { ok: true; data: CreateBookingBody } | { ok: 
     return { ok: false, error: "La note est trop longue." };
   if (!PAYMENT_METHODS.includes(b.paymentMethod as PaymentMethod))
     return { ok: false, error: "Mode de paiement invalide." };
+  if (
+    b.promoCode != null &&
+    (typeof b.promoCode !== "string" || normalizePromoCode(b.promoCode).length > 32)
+  )
+    return { ok: false, error: "Code promo invalide." };
 
   return { ok: true, data: b as CreateBookingBody };
 }
@@ -191,6 +204,34 @@ export async function POST(request: NextRequest) {
       settings.peak_windows
     );
 
+    let subtotalMad = price.totalMad;
+    let discountMad = 0;
+    let appliedPromoCode: string | null = null;
+
+    const rawPromo = input.promoCode?.trim();
+    if (rawPromo) {
+      const promo = await fetchPromoByCode(rawPromo, supabase);
+      if (!promo) {
+        return NextResponse.json(
+          { error: "Code promo introuvable." },
+          { status: 400 }
+        );
+      }
+      const check = validatePromoForBooking(promo, subtotalMad);
+      if (!check.ok) {
+        return NextResponse.json({ error: check.error }, { status: 400 });
+      }
+      const discounted = calculatePromoDiscount(subtotalMad, promo);
+      discountMad = discounted.discountMad;
+      subtotalMad = price.totalMad;
+      appliedPromoCode = promo.code;
+    }
+
+    const totalMad =
+      appliedPromoCode != null
+        ? Math.max(0, Math.round((subtotalMad - discountMad) * 100) / 100)
+        : subtotalMad;
+
     // Payment deadline: 48h (configurable), capped at the booking start
     const deadlineMs = Math.min(
       Date.now() + settings.confirmation_deadline_hours * 3_600_000,
@@ -209,7 +250,10 @@ export async function POST(request: NextRequest) {
           date: input.date,
           start_minutes: input.startMinutes,
           duration_minutes: input.durationMinutes,
-          total_price_mad: price.totalMad,
+          total_price_mad: totalMad,
+          subtotal_price_mad: appliedPromoCode != null ? subtotalMad : null,
+          discount_amount_mad: appliedPromoCode != null ? discountMad : null,
+          promo_code: appliedPromoCode,
           customer_name: input.name.trim(),
           customer_email: input.email.trim().toLowerCase(),
           customer_phone: input.phone.trim(),
@@ -253,18 +297,32 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (appliedPromoCode) {
+      await incrementPromoUses(appliedPromoCode, supabase);
+    }
+
     // Emails: never fail the booking if they error
     const emailCtx = { booking, studio, settings };
-    await Promise.allSettled([
+    const [clientEmailResult, adminEmailResult] = await Promise.all([
       sendBookingReceivedEmail(emailCtx),
       sendAdminNewBookingEmail(emailCtx),
     ]);
+    if (!clientEmailResult.ok) {
+      console.error("Client booking email failed:", clientEmailResult.error);
+    }
+    if (!adminEmailResult.ok) {
+      console.error("Admin booking email failed:", adminEmailResult.error);
+    }
 
     return NextResponse.json({
       success: true,
       reference: booking.reference,
       totalPriceMad: booking.total_price_mad,
+      subtotalPriceMad: booking.subtotal_price_mad,
+      discountAmountMad: booking.discount_amount_mad,
+      promoCode: booking.promo_code,
       paymentDeadline: booking.payment_deadline,
+      emailSent: clientEmailResult.ok,
     });
   } catch (err) {
     console.error("Booking API error:", err);

@@ -10,6 +10,7 @@ import type {
   PeakWindow,
   Settings,
   Studio,
+  PromoDiscountType,
 } from "@/lib/booking/types";
 import {
   computeBookingPrice,
@@ -23,6 +24,7 @@ import {
   fetchSettings,
   generateBookingReference,
 } from "@/lib/booking/db";
+import { normalizePromoCode } from "@/lib/booking/promo";
 import {
   sendBookingCancelledEmail,
   sendBookingConfirmedEmail,
@@ -434,6 +436,134 @@ export async function updateSettings(
     revalidatePath("/admin/settings");
     revalidatePath("/reservation");
     return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Erreur" };
+  }
+}
+
+export interface PromoCodeInput {
+  code: string;
+  label: string;
+  discount_type: PromoDiscountType;
+  discount_value: number;
+  min_amount_mad: number | null;
+  max_uses: number | null;
+  valid_from: string | null;
+  valid_until: string | null;
+  active: boolean;
+}
+
+function validatePromoInput(input: PromoCodeInput): string | null {
+  const code = normalizePromoCode(input.code);
+  if (!code || code.length > 32) return "Code promo invalide (max 32 caractères).";
+  if (!["percent", "fixed"].includes(input.discount_type)) {
+    return "Type de réduction invalide.";
+  }
+  if (!Number.isFinite(input.discount_value) || input.discount_value <= 0) {
+    return "Valeur de réduction invalide.";
+  }
+  if (input.discount_type === "percent" && input.discount_value > 100) {
+    return "La réduction en pourcentage ne peut pas dépasser 100%.";
+  }
+  if (
+    input.min_amount_mad != null &&
+    (!Number.isFinite(input.min_amount_mad) || input.min_amount_mad < 0)
+  ) {
+    return "Montant minimum invalide.";
+  }
+  if (
+    input.max_uses != null &&
+    (!Number.isInteger(input.max_uses) || input.max_uses < 1)
+  ) {
+    return "Nombre d'utilisations max invalide.";
+  }
+  if (input.valid_from && input.valid_until) {
+    if (new Date(input.valid_from) >= new Date(input.valid_until)) {
+      return "La date de fin doit être après la date de début.";
+    }
+  }
+  return null;
+}
+
+export async function createPromoCode(
+  input: PromoCodeInput
+): Promise<ActionResult> {
+  try {
+    await requireAdmin();
+    const validationError = validatePromoInput(input);
+    if (validationError) return { ok: false, error: validationError };
+
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase.from("promo_codes").insert({
+      code: normalizePromoCode(input.code),
+      label: input.label.trim() || null,
+      discount_type: input.discount_type,
+      discount_value: input.discount_value,
+      min_amount_mad: input.min_amount_mad,
+      max_uses: input.max_uses,
+      valid_from: input.valid_from || null,
+      valid_until: input.valid_until || null,
+      active: input.active,
+    });
+    if (error) {
+      if (error.code === "23505") {
+        return { ok: false, error: "Ce code promo existe déjà." };
+      }
+      throw new Error(error.message);
+    }
+    revalidatePath("/admin/promo-codes");
+    return { ok: true, message: "Code promo créé." };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Erreur" };
+  }
+}
+
+export async function updatePromoCode(
+  id: number,
+  input: PromoCodeInput
+): Promise<ActionResult> {
+  try {
+    await requireAdmin();
+    const validationError = validatePromoInput(input);
+    if (validationError) return { ok: false, error: validationError };
+
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase
+      .from("promo_codes")
+      .update({
+        code: normalizePromoCode(input.code),
+        label: input.label.trim() || null,
+        discount_type: input.discount_type,
+        discount_value: input.discount_value,
+        min_amount_mad: input.min_amount_mad,
+        max_uses: input.max_uses,
+        valid_from: input.valid_from || null,
+        valid_until: input.valid_until || null,
+        active: input.active,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id);
+    if (error) {
+      if (error.code === "23505") {
+        return { ok: false, error: "Ce code promo existe déjà." };
+      }
+      throw new Error(error.message);
+    }
+    revalidatePath("/admin/promo-codes");
+    return { ok: true, message: "Code promo mis à jour." };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Erreur" };
+  }
+}
+
+export async function deletePromoCode(id: number): Promise<ActionResult> {
+  try {
+    await requireAdmin();
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase.from("promo_codes").delete().eq("id", id);
+    if (error) throw new Error(error.message);
+    revalidatePath("/admin/promo-codes");
+    return { ok: true, message: "Code promo supprimé." };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Erreur" };
   }

@@ -10,3 +10,12 @@ export function getSupabaseAdmin(): SupabaseClient {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 }
+
+/** Returns null when the service key is missing or invalid (e.g. publishable key on Vercel). */
+export function tryGetSupabaseAdmin(): SupabaseClient | null {
+  try {
+    return getSupabaseAdmin();
+  } catch {
+    return null;
+  }
+}

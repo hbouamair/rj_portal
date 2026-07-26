@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -31,6 +31,7 @@ import {
   Music,
   PartyPopper,
   Sparkles,
+  Tag,
   Users,
 } from "lucide-react";
 import type { PaymentMethod, Settings, Studio } from "@/lib/booking/types";
@@ -53,7 +54,18 @@ interface Props {
 interface BookingResult {
   reference: string;
   totalPriceMad: number;
+  subtotalPriceMad?: number | null;
+  discountAmountMad?: number | null;
+  promoCode?: string | null;
   paymentDeadline: string;
+  emailSent?: boolean;
+}
+
+interface AppliedPromo {
+  code: string;
+  label: string | null;
+  discountMad: number;
+  totalMad: number;
 }
 
 const STEPS = ["Studio", "Date & heure", "Coordonnées", "Confirmé"];
@@ -81,9 +93,27 @@ export default function BookingWizard({ studios, settings }: Props) {
   const [phone, setPhone] = useState("");
   const [note, setNote] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
+  const [promoInput, setPromoInput] = useState("");
+  const [appliedPromo, setAppliedPromo] = useState<AppliedPromo | null>(null);
+  const [promoError, setPromoError] = useState<string | null>(null);
+  const [validatingPromo, setValidatingPromo] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<BookingResult | null>(null);
+  const wizardRef = useRef<HTMLDivElement>(null);
+  const skipInitialScroll = useRef(true);
+
+  useEffect(() => {
+    if (skipInitialScroll.current) {
+      skipInitialScroll.current = false;
+      return;
+    }
+    const el = wizardRef.current;
+    if (!el) return;
+    const navOffset = 112;
+    const top = el.getBoundingClientRect().top + window.scrollY - navOffset;
+    window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+  }, [step]);
 
   const loadAvailability = useCallback(
     async (studioId: number, date: string) => {
@@ -165,6 +195,42 @@ export default function BookingWizard({ studios, settings }: Props) {
     );
   }, [studio, selectedDate, startMinutes, duration, settings.peak_windows]);
 
+  const displayTotalMad = appliedPromo?.totalMad ?? price?.totalMad ?? null;
+
+  async function applyPromoCode() {
+    if (!price || !promoInput.trim()) return;
+    setValidatingPromo(true);
+    setPromoError(null);
+    try {
+      const res = await fetch(
+        `/api/promo/validate?code=${encodeURIComponent(promoInput.trim())}&subtotal=${price.totalMad}`
+      );
+      const json = await res.json();
+      if (!json.valid) {
+        setAppliedPromo(null);
+        setPromoError(json.error ?? "Code promo invalide.");
+        return;
+      }
+      setAppliedPromo({
+        code: json.code,
+        label: json.label ?? null,
+        discountMad: json.discountMad,
+        totalMad: json.totalMad,
+      });
+    } catch {
+      setPromoError("Impossible de vérifier le code promo.");
+      setAppliedPromo(null);
+    } finally {
+      setValidatingPromo(false);
+    }
+  }
+
+  function clearPromo() {
+    setPromoInput("");
+    setAppliedPromo(null);
+    setPromoError(null);
+  }
+
   async function submitBooking() {
     if (!studio || !selectedDate || startMinutes === null) return;
     setSubmitting(true);
@@ -183,6 +249,7 @@ export default function BookingWizard({ studios, settings }: Props) {
           phone,
           note: note || undefined,
           paymentMethod,
+          promoCode: appliedPromo?.code,
         }),
       });
       const json = await res.json();
@@ -196,7 +263,6 @@ export default function BookingWizard({ studios, settings }: Props) {
       }
       setResult(json as BookingResult);
       setStep(3);
-      window.scrollTo({ top: 0, behavior: "smooth" });
     } catch {
       setError(
         "Impossible d'envoyer la réservation. Vérifiez votre connexion."
@@ -212,7 +278,7 @@ export default function BookingWizard({ studios, settings }: Props) {
     phone.trim().length >= 8;
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div ref={wizardRef} className="max-w-5xl mx-auto scroll-mt-28">
       <StepIndicator current={step} />
 
       <AnimatePresence mode="wait">
@@ -493,6 +559,63 @@ export default function BookingWizard({ studios, settings }: Props) {
                     />
                   </Field>
 
+                  <div className="border-t border-charcoal/5 pt-5 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Tag className="w-4 h-4 text-primary-500" aria-hidden />
+                      <h3 className="font-display font-bold text-charcoal tracking-tight">
+                        Code promo
+                      </h3>
+                      <span className="text-xs text-soft-charcoal">(optionnel)</span>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <input
+                        type="text"
+                        value={promoInput}
+                        onChange={(e) => {
+                          setPromoInput(e.target.value.toUpperCase());
+                          if (appliedPromo) setAppliedPromo(null);
+                          setPromoError(null);
+                        }}
+                        maxLength={32}
+                        className="book-input min-h-12 flex-1 uppercase"
+                        placeholder="ETE2026"
+                        disabled={Boolean(appliedPromo)}
+                      />
+                      {appliedPromo ? (
+                        <button
+                          type="button"
+                          onClick={clearPromo}
+                          className="book-btn-ghost min-h-12 shrink-0"
+                        >
+                          Retirer
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={applyPromoCode}
+                          disabled={!promoInput.trim() || validatingPromo || !price}
+                          className="book-btn-ghost min-h-12 shrink-0"
+                        >
+                          {validatingPromo ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            "Appliquer"
+                          )}
+                        </button>
+                      )}
+                    </div>
+                    {appliedPromo && (
+                      <p className="text-sm font-medium text-secondary-700 bg-secondary-50 border border-secondary-100 rounded-xl px-3 py-2">
+                        Code <strong>{appliedPromo.code}</strong> appliqué
+                        {appliedPromo.label ? ` — ${appliedPromo.label}` : ""}.
+                        Réduction : {formatMad(appliedPromo.discountMad)}.
+                      </p>
+                    )}
+                    {promoError && (
+                      <p className="text-sm text-accent-700">{promoError}</p>
+                    )}
+                  </div>
+
                   <div className="pt-2">
                     <h3 className="font-display font-bold text-charcoal tracking-tight mb-1">
                       Mode de paiement
@@ -591,12 +714,24 @@ export default function BookingWizard({ studios, settings }: Props) {
                       label="Paiement"
                       value={PAYMENT_METHOD_LABELS[paymentMethod]}
                     />
+                    {appliedPromo && price && (
+                      <>
+                        <SummaryRow
+                          label="Sous-total"
+                          value={formatMad(price.totalMad)}
+                        />
+                        <SummaryRow
+                          label={`Promo ${appliedPromo.code}`}
+                          value={`-${formatMad(appliedPromo.discountMad)}`}
+                        />
+                      </>
+                    )}
                     <div className="border-t border-charcoal/5 pt-4 flex items-baseline justify-between">
                       <span className="text-sm font-semibold text-soft-charcoal">
                         Total
                       </span>
                       <span className="text-2xl font-display font-bold text-charcoal tracking-tight">
-                        {price ? formatMad(price.totalMad) : "—"}
+                        {displayTotalMad != null ? formatMad(displayTotalMad) : "—"}
                       </span>
                     </div>
                   </div>
@@ -1010,7 +1145,15 @@ function ConfirmationStep({
           Réservation reçue !
         </h2>
         <p className="text-soft-charcoal mb-6 leading-relaxed">
-          Un email vient de vous être envoyé. Votre référence :
+          {result.emailSent === false ? (
+            <>
+              Votre réservation est enregistrée, mais l&apos;email n&apos;a pas
+              pu être envoyé automatiquement. Conservez votre référence ci-dessous
+              et suivez les instructions de paiement sur cette page.
+            </>
+          ) : (
+            <>Un email vient de vous être envoyé. Votre référence :</>
+          )}
         </p>
         <div className="inline-block px-6 py-3 rounded-2xl bg-primary-50 text-primary-600 font-display font-bold text-2xl tracking-[0.12em] mb-7 border border-primary-100">
           {result.reference}
@@ -1027,6 +1170,18 @@ function ConfirmationStep({
             label="Horaire"
             value={`${minutesToTimeString(startMinutes)} – ${minutesToTimeString(startMinutes + duration)}`}
           />
+          {result.promoCode && result.subtotalPriceMad != null && (
+            <SummaryRow
+              label="Sous-total"
+              value={formatMad(Number(result.subtotalPriceMad))}
+            />
+          )}
+          {result.promoCode && result.discountAmountMad != null && (
+            <SummaryRow
+              label={`Promo ${result.promoCode}`}
+              value={`-${formatMad(Number(result.discountAmountMad))}`}
+            />
+          )}
           <SummaryRow
             label="Total"
             value={formatMad(Number(result.totalPriceMad))}

@@ -28,10 +28,15 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ busy });
   } catch (err) {
     console.error("Availability API error:", err);
-    const message =
-      err instanceof Error && err.message.includes("does not exist")
-        ? "La base de données n'est pas initialisée. Exécutez supabase/migration.sql dans Supabase."
-        : "Impossible de charger les disponibilités.";
+    const msg = err instanceof Error ? err.message : "";
+    let message = "Impossible de charger les disponibilités.";
+    if (msg.includes("does not exist") || msg.includes("get_busy_slots")) {
+      message =
+        "La base de données n'est pas à jour. Exécutez supabase/availability-rpc.sql dans Supabase → SQL Editor.";
+    } else if (msg.includes("SUPABASE_SECRET_KEY") || msg.includes("publishable")) {
+      message =
+        "Configuration Supabase incorrecte sur le serveur. Vérifiez SUPABASE_SECRET_KEY sur Vercel (sb_secret_…, pas sb_publishable_…).";
+    }
     return NextResponse.json({ error: message }, { status: 503 });
   }
 }

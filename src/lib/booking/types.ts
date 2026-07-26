@@ -34,6 +34,24 @@ export interface Settings {
   reminder_hours_before: number;
 }
 
+export type PromoDiscountType = "percent" | "fixed";
+
+export interface PromoCode {
+  id: number;
+  code: string;
+  label: string | null;
+  discount_type: PromoDiscountType;
+  discount_value: number;
+  min_amount_mad: number | null;
+  max_uses: number | null;
+  uses_count: number;
+  valid_from: string | null;
+  valid_until: string | null;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export type PaymentMethod = "paypal" | "virement" | "cash";
 
 export type BookingStatus =
@@ -51,6 +69,9 @@ export interface Booking {
   start_minutes: number;
   duration_minutes: number;
   total_price_mad: number;
+  subtotal_price_mad: number | null;
+  discount_amount_mad: number | null;
+  promo_code: string | null;
   customer_name: string;
   customer_email: string;
   customer_phone: string;

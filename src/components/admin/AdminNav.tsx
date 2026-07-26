@@ -9,6 +9,7 @@ import {
   Menu,
   Music,
   Settings,
+  Tag,
   TrendingUp,
   X,
 } from "lucide-react";
@@ -16,6 +17,7 @@ import {
 const LINKS = [
   { href: "/admin", label: "Réservations", icon: CalendarDays, hint: "Agenda & paiements" },
   { href: "/admin/studios", label: "Studios", icon: Music, hint: "Tarifs & salles" },
+  { href: "/admin/promo-codes", label: "Codes promo", icon: Tag, hint: "Réductions clients" },
   { href: "/admin/income", label: "Revenus", icon: TrendingUp, hint: "Chiffre d'affaires" },
   { href: "/admin/settings", label: "Paramètres", icon: Settings, hint: "Horaires & paiements" },
 ];

@@ -1,9 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { getSupabaseAdmin, tryGetSupabaseAdmin } from "@/lib/supabase/admin";
 import { getSupabasePublic } from "@/lib/supabase/public";
-import type { Booking, Settings, Studio } from "./types";
+import type { Booking, Settings, Studio, PromoCode } from "./types";
 import type { BusyInterval } from "./pricing";
 import { bookingStartUtc, nowInStudioTime } from "./pricing";
+import { normalizePromoCode } from "./promo";
 
 const REFERENCE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
@@ -77,10 +78,13 @@ export async function fetchSettings(
  * if this housekeeping step fails (e.g. tables not migrated yet).
  */
 export async function expireStalePendingBookings(
-  client: SupabaseClient = getSupabaseAdmin()
+  client?: SupabaseClient
 ): Promise<Booking[]> {
+  const db = client ?? tryGetSupabaseAdmin();
+  if (!db) return [];
+
   try {
-    const { data, error } = await client
+    const { data, error } = await db
       .from("bookings")
       .update({ status: "expired", updated_at: new Date().toISOString() })
       .eq("status", "pending")
@@ -102,16 +106,40 @@ export async function expireStalePendingBookings(
 export async function fetchBusySlots(
   studioId: number,
   date: string,
-  client: SupabaseClient = getSupabaseAdmin()
+  client?: SupabaseClient
 ): Promise<BusyInterval[]> {
-  const { data, error } = await client
-    .from("bookings")
-    .select("start_minutes, duration_minutes")
-    .eq("studio_id", studioId)
-    .eq("date", date)
-    .in("status", ["pending", "confirmed"]);
-  if (error) throw formatDbError("fetchBusySlots", error);
-  return (data ?? []) as BusyInterval[];
+  const publicClient = client ?? getSupabasePublic();
+
+  const { data, error } = await publicClient.rpc("get_busy_slots", {
+    p_studio_id: studioId,
+    p_date: date,
+  });
+
+  if (!error) {
+    return (data ?? []) as BusyInterval[];
+  }
+
+  const rpcMissing =
+    error.code === "42883" ||
+    error.message.includes("get_busy_slots") ||
+    error.message.includes("Could not find the function");
+
+  if (rpcMissing) {
+    const admin = client ?? tryGetSupabaseAdmin();
+    if (!admin) {
+      throw formatDbError("fetchBusySlots", error);
+    }
+    const legacy = await admin
+      .from("bookings")
+      .select("start_minutes, duration_minutes")
+      .eq("studio_id", studioId)
+      .eq("date", date)
+      .in("status", ["pending", "confirmed"]);
+    if (legacy.error) throw formatDbError("fetchBusySlots", legacy.error);
+    return (legacy.data ?? []) as BusyInterval[];
+  }
+
+  throw formatDbError("fetchBusySlots", error);
 }
 
 export interface BookingWithStudioName extends Booking {
@@ -166,4 +194,50 @@ export async function markBookingReminderSent(
   if (error) {
     console.error(`markBookingReminderSent (${target}):`, error.message);
   }
+}
+
+export async function fetchAllPromoCodes(
+  client: SupabaseClient = getSupabaseAdmin()
+): Promise<PromoCode[]> {
+  const { data, error } = await client
+    .from("promo_codes")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) throw formatDbError("fetchAllPromoCodes", error);
+  return (data ?? []) as PromoCode[];
+}
+
+export async function fetchPromoByCode(
+  code: string,
+  client: SupabaseClient = getSupabaseAdmin()
+): Promise<PromoCode | null> {
+  const normalized = normalizePromoCode(code);
+  if (!normalized) return null;
+  const { data, error } = await client
+    .from("promo_codes")
+    .select("*")
+    .eq("code", normalized)
+    .maybeSingle();
+  if (error) throw formatDbError("fetchPromoByCode", error);
+  return (data as PromoCode | null) ?? null;
+}
+
+export async function incrementPromoUses(
+  code: string,
+  client: SupabaseClient = getSupabaseAdmin()
+): Promise<void> {
+  const normalized = normalizePromoCode(code);
+  const { data, error } = await client
+    .from("promo_codes")
+    .select("uses_count")
+    .eq("code", normalized)
+    .single();
+  if (error || !data) return;
+  await client
+    .from("promo_codes")
+    .update({
+      uses_count: (data.uses_count as number) + 1,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("code", normalized);
 }
