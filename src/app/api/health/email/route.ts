@@ -1,4 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { getResendClient } from "@/lib/resend-client";
+import { formatResendError, getFromEmail, getFromAddress } from "@/lib/email-config";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +22,7 @@ function parseFromEmail(raw: string | undefined): {
 /** Visit /api/health/email after deploy — checks Resend env (no secrets exposed). */
 export async function GET() {
   const from = parseFromEmail(process.env.RESEND_FROM_EMAIL);
+  const runtimeFrom = getFromAddress();
   const hasKey = Boolean(process.env.RESEND_API_KEY?.trim());
   const keyPrefix = process.env.RESEND_API_KEY?.trim().slice(0, 3) ?? "";
 
@@ -54,6 +57,7 @@ export async function GET() {
       resendKey: hasKey,
       fromEmail: from.address,
       fromDomain: from.domain,
+      runtimeFromEmail: runtimeFrom,
       expectedDomain: "rjstudio.ma",
       adminEmail:
         process.env.BOOKING_ADMIN_EMAIL?.trim() ??
@@ -63,7 +67,49 @@ export async function GET() {
     issues,
     hint:
       issues.length === 0
-        ? "Config OK côté env. Si les emails n'arrivent pas : vérifiez Resend → Emails (logs), le dossier spam, et redéployez après toute modification d'env."
+        ? "Config OK côté env. Test d'envoi : POST /api/health/email avec Authorization: Bearer CRON_SECRET et body { \"to\": \"votre@email.com\" }."
         : undefined,
   });
+}
+
+/** Send a test email (Authorization: Bearer CRON_SECRET). */
+export async function POST(request: NextRequest) {
+  const auth = request.headers.get("authorization");
+  if (!process.env.CRON_SECRET || auth !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const resend = getResendClient();
+  if (!resend) {
+    return NextResponse.json({ error: "RESEND_API_KEY manquant." }, { status: 503 });
+  }
+
+  let to = "";
+  try {
+    const body = await request.json();
+    to = typeof body?.to === "string" ? body.to.trim() : "";
+  } catch {
+    return NextResponse.json({ error: "Body JSON invalide." }, { status: 400 });
+  }
+
+  if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
+    return NextResponse.json({ error: "Champ \"to\" email invalide." }, { status: 400 });
+  }
+
+  const from = getFromEmail();
+  const { data, error } = await resend.emails.send({
+    from,
+    to: [to],
+    subject: "[RJ Studio] Test email Resend",
+    html: "<p>Si vous recevez ceci, Resend fonctionne correctement.</p>",
+  });
+
+  if (error) {
+    return NextResponse.json(
+      { ok: false, from, to, error: formatResendError(error) },
+      { status: 502 }
+    );
+  }
+
+  return NextResponse.json({ ok: true, from, to, id: data?.id });
 }

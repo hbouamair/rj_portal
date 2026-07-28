@@ -1,4 +1,5 @@
 import { getResendClient } from "@/lib/resend-client";
+import { formatResendError, getFromEmail } from "@/lib/email-config";
 import { CONTACT_EMAIL } from "@/lib/constants";
 import type { Booking, Settings, Studio } from "./types";
 import { bookingStartUtc } from "./pricing";
@@ -11,8 +12,6 @@ import {
   getBookingReceivedEmailHtml,
 } from "./email-templates";
 
-const FROM_EMAIL =
-  process.env.RESEND_FROM_EMAIL ?? "RJ Studio <onboarding@resend.dev>";
 const ADMIN_EMAIL =
   process.env.BOOKING_ADMIN_EMAIL ??
   process.env.CONTACT_TO_EMAIL ??
@@ -41,32 +40,42 @@ async function send(
   subject: string,
   html: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  if (!process.env.RESEND_API_KEY) {
-    const error = "RESEND_API_KEY manquant dans .env.local";
+  if (!process.env.RESEND_API_KEY?.trim()) {
+    const error = "RESEND_API_KEY manquant sur le serveur (Vercel → Environment Variables).";
     console.error(`Booking emails: ${error}`);
     return { ok: false, error };
   }
   const resend = getResendClient();
   if (!resend) {
-    const error = "RESEND_API_KEY manquant dans .env.local";
+    const error = "Impossible d'initialiser le client Resend (clé API invalide).";
     console.error(`Booking emails: ${error}`);
     return { ok: false, error };
   }
-  const { error } = await resend.emails.send({
-    from: FROM_EMAIL,
-    to: [to],
-    subject,
-    html,
-  });
-  if (error) {
-    console.error(`Booking email error (${subject}):`, error);
-    const detail =
-      typeof error === "object" && error !== null && "message" in error
-        ? String((error as { message: unknown }).message)
-        : "Erreur Resend lors de l'envoi de l'email.";
+
+  const from = getFromEmail();
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from,
+      to: [to],
+      subject,
+      html,
+    });
+    if (error) {
+      const detail = formatResendError(error);
+      console.error(`Booking email error (${subject}):`, { from, to, error });
+      return { ok: false, error: detail };
+    }
+    if (!data?.id) {
+      console.error(`Booking email no id (${subject}):`, { from, to, data });
+      return { ok: false, error: "Resend n'a pas retourné d'identifiant d'email." };
+    }
+    return { ok: true };
+  } catch (err) {
+    const detail = formatResendError(err);
+    console.error(`Booking email exception (${subject}):`, { from, to, err });
     return { ok: false, error: detail };
   }
-  return { ok: true };
 }
 
 /** Sent to the client right after the booking is created. */

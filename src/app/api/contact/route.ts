@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getContactEmailHtml } from "@/lib/contact-email-template";
 import { CONTACT_EMAIL } from "@/lib/constants";
 import { getResendClient } from "@/lib/resend-client";
+import { formatResendError, getFromEmail } from "@/lib/email-config";
 
 const TO_EMAIL = process.env.CONTACT_TO_EMAIL ?? CONTACT_EMAIL;
-const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? "RJ Studio <onboarding@resend.dev>";
 
 const MAX_NAME = 100;
 const MAX_EMAIL = 254;
@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
     });
 
     const { data, error } = await resend.emails.send({
-      from: FROM_EMAIL,
+      from: getFromEmail(),
       to: [TO_EMAIL],
       replyTo: email.trim(),
       subject: `[RJ Studio] Message de ${name.trim()}`,
@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
     if (error) {
       console.error("Resend error:", error);
       return NextResponse.json(
-        { error: "Échec de l'envoi du message. Réessayez plus tard." },
+        { error: formatResendError(error) },
         { status: 500 }
       );
     }

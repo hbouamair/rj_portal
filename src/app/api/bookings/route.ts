@@ -323,6 +323,9 @@ export async function POST(request: NextRequest) {
       promoCode: booking.promo_code,
       paymentDeadline: booking.payment_deadline,
       emailSent: clientEmailResult.ok,
+      ...(clientEmailResult.ok
+        ? {}
+        : { emailError: clientEmailResult.error }),
     });
   } catch (err) {
     console.error("Booking API error:", err);
