@@ -60,10 +60,11 @@ async function send(
   });
   if (error) {
     console.error(`Booking email error (${subject}):`, error);
-    return {
-      ok: false,
-      error: error.message ?? "Erreur Resend lors de l'envoi de l'email.",
-    };
+    const detail =
+      typeof error === "object" && error !== null && "message" in error
+        ? String((error as { message: unknown }).message)
+        : "Erreur Resend lors de l'envoi de l'email.";
+    return { ok: false, error: detail };
   }
   return { ok: true };
 }

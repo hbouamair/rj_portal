@@ -33,11 +33,16 @@ export function supabaseAnonKey(): string {
 
 /** Server-only: service_role (legacy) or secret (sb_secret_...) key. */
 export function supabaseServiceKey(): string {
-  const key = (
-    process.env.SUPABASE_SERVICE_ROLE_KEY ??
-    process.env.SUPABASE_SECRET_KEY
-  )?.trim();
-  if (!key) {
+  const fromServiceRole = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  const fromSecret = process.env.SUPABASE_SECRET_KEY?.trim();
+  const source = fromServiceRole
+    ? "SUPABASE_SERVICE_ROLE_KEY"
+    : fromSecret
+      ? "SUPABASE_SECRET_KEY"
+      : null;
+  const key = fromServiceRole ?? fromSecret;
+
+  if (!key || !source) {
     throw new Error(
       "SUPABASE_SECRET_KEY manquant (sb_secret_…). " +
         "Supabase → Project Settings → API Keys → secret. " +
@@ -47,8 +52,10 @@ export function supabaseServiceKey(): string {
 
   if (key.startsWith("sb_publishable_")) {
     throw new Error(
-      "SUPABASE_SECRET_KEY ne doit pas être la clé publishable. " +
-        "Utilisez la clé secret (sb_secret_…) depuis Supabase → API Keys."
+      `${source} ne doit pas être la clé publishable (sb_publishable_…). ` +
+        "Utilisez la clé secret (sb_secret_…) ou le JWT service_role (eyJ…, rôle service_role) " +
+        "depuis Supabase → Project Settings → API Keys. " +
+        "Sur Vercel, vérifiez aussi qu'aucune variable SUPABASE_SERVICE_ROLE_KEY incorrecte ne remplace SUPABASE_SECRET_KEY."
     );
   }
 
