@@ -4,78 +4,14 @@ import { useMemo, useState, useTransition } from "react";
 import { Download, ChevronDown, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import type { BookingWithStudio, OpeningHours } from "@/lib/booking/types";
-import {
-  BOOKING_STATUS_LABELS,
-  COURSE_TYPE_LABELS,
-  PAYMENT_METHOD_LABELS,
-} from "@/lib/booking/types";
-import { minutesToTimeString, openingForDate } from "@/lib/booking/pricing";
+import { openingForDate } from "@/lib/booking/pricing";
 import { formatExportDateFr } from "@/lib/booking/export-filters";
+import {
+  downloadBookingsExcel,
+  downloadDailyStatsExcel,
+  type DailyStatRow,
+} from "@/lib/booking/excel-export";
 import { fetchBookingsForExportDay } from "@/app/admin/actions";
-
-function csvCell(value: string | number): string {
-  const s = String(value);
-  return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
-
-function buildCsv(bookings: BookingWithStudio[]): string {
-  const header = [
-    "Référence",
-    "Type de cours",
-    "Studio",
-    "Date",
-    "Début",
-    "Fin",
-    "Durée (min)",
-    "Client",
-    "Email",
-    "Téléphone",
-    "Prix (MAD)",
-    "Cours réguliers",
-    "Forfait (séance)",
-    "Paiement",
-    "Statut",
-    "Créée le",
-  ];
-  const lines = bookings.map((b) =>
-    [
-      b.reference,
-      COURSE_TYPE_LABELS[b.course_type ?? "group"] ?? b.course_type,
-      b.studios?.name ?? `Studio ${b.studio_id}`,
-      b.date,
-      minutesToTimeString(b.start_minutes),
-      minutesToTimeString(b.start_minutes + b.duration_minutes),
-      b.duration_minutes,
-      b.customer_name,
-      b.customer_email,
-      b.customer_phone,
-      Number(b.total_price_mad),
-      b.regular_course_count ?? "",
-      b.package_index && b.regular_course_count
-        ? `${b.package_index}/${b.regular_course_count}`
-        : "",
-      PAYMENT_METHOD_LABELS[b.payment_method] ?? b.payment_method,
-      BOOKING_STATUS_LABELS[b.status] ?? b.status,
-      new Date(b.created_at).toLocaleString("fr-FR", {
-        timeZone: "Africa/Casablanca",
-      }),
-    ]
-      .map(csvCell)
-      .join(";")
-  );
-  return "\uFEFF" + [header.join(";"), ...lines].join("\r\n");
-}
-
-function downloadCsv(csv: string, filename: string) {
-  const url = URL.createObjectURL(
-    new Blob([csv], { type: "text/csv;charset=utf-8" })
-  );
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
 
 function datesInRange(from: string, to: string): string[] {
   const dates: string[] = [];
@@ -88,20 +24,6 @@ function datesInRange(from: string, to: string): string[] {
     cur.setDate(cur.getDate() + 1);
   }
   return dates;
-}
-
-interface DailyStatRow {
-  date: string;
-  sessions: number;
-  pending: number;
-  confirmed: number;
-  completed: number;
-  cancelled: number;
-  expired: number;
-  bookedMinutes: number;
-  revenueMad: number;
-  openMinutes: number;
-  occupancyPct: number;
 }
 
 /** Aggregate booking stats one row per calendar day. */
@@ -176,40 +98,6 @@ function buildDailyStats(
   });
 }
 
-function buildDailyStatsCsv(rows: DailyStatRow[]): string {
-  const header = [
-    "Date",
-    "Séances (total)",
-    "En attente",
-    "Confirmées",
-    "Terminées",
-    "Annulées",
-    "Expirées",
-    "Minutes réservées",
-    "Minutes ouvertes",
-    "Occupation %",
-    "Revenus confirmés (MAD)",
-  ];
-  const lines = rows.map((r) =>
-    [
-      r.date,
-      r.sessions,
-      r.pending,
-      r.confirmed,
-      r.completed,
-      r.cancelled,
-      r.expired,
-      r.bookedMinutes,
-      r.openMinutes,
-      r.occupancyPct,
-      r.revenueMad,
-    ]
-      .map(csvCell)
-      .join(";")
-  );
-  return "\uFEFF" + [header.join(";"), ...lines].join("\r\n");
-}
-
 interface Props {
   /** Which admin page — changes available choices and labels. */
   context: "reservations" | "statistiques";
@@ -230,7 +118,7 @@ interface Props {
   activeStudioCount?: number;
 }
 
-/** CSV export with explicit scope choice and visible active filters. */
+/** Excel (.xlsx) export with explicit scope choice and visible active filters. */
 export default function ExportCsvButton({
   context,
   bookings,
@@ -308,16 +196,42 @@ export default function ExportCsvButton({
     [bookings, exactDay]
   );
 
-  function exportRows(rows: BookingWithStudio[], filename: string) {
+  async function exportRows(
+    rows: BookingWithStudio[],
+    filename: string,
+    subtitle?: string
+  ) {
     if (rows.length === 0) return;
-    downloadCsv(buildCsv(rows), filename);
+    await downloadBookingsExcel({
+      bookings: rows,
+      filename,
+      subtitle: subtitle ?? activeFilterLabel,
+    });
     setOpen(false);
   }
 
-  function exportDaily(rows: DailyStatRow[], filename: string) {
+  async function exportDaily(
+    rows: DailyStatRow[],
+    filename: string,
+    subtitle?: string
+  ) {
     if (rows.length === 0) return;
-    downloadCsv(buildDailyStatsCsv(rows), filename);
+    await downloadDailyStatsExcel({
+      rows,
+      filename,
+      subtitle,
+    });
     setOpen(false);
+  }
+
+  function runExport(task: () => Promise<void>) {
+    startTransition(async () => {
+      try {
+        await task();
+      } catch {
+        setDayError("Impossible de générer le fichier Excel.");
+      }
+    });
   }
 
   function loadExactDay(mode: "detail" | "stats") {
@@ -326,7 +240,7 @@ export default function ExportCsvButton({
       return;
     }
     setDayError(null);
-    startTransition(async () => {
+    runExport(async () => {
       const result = await fetchBookingsForExportDay(exactDay, dayFilters);
       if (!result.ok) {
         setDayError(result.error ?? "Impossible de charger ce jour.");
@@ -345,9 +259,17 @@ export default function ExportCsvButton({
           openingHours,
           activeStudioCount
         );
-        exportDaily(rows, `stats-jour-${exactDay}.csv`);
+        await exportDaily(
+          rows,
+          `stats-jour-${exactDay}.xlsx`,
+          `Journée du ${formatExportDateFr(exactDay)}`
+        );
       } else {
-        exportRows(dayBookings, `reservations-jour-${exactDay}.csv`);
+        await exportRows(
+          dayBookings,
+          `reservations-jour-${exactDay}.xlsx`,
+          `Journée du ${formatExportDateFr(exactDay)}`
+        );
       }
     });
   }
@@ -365,7 +287,7 @@ export default function ExportCsvButton({
         aria-haspopup="menu"
       >
         <Download className="w-4 h-4" aria-hidden />
-        Exporter CSV
+        Exporter Excel
         <ChevronDown className="w-3.5 h-3.5 opacity-60" aria-hidden />
       </button>
       {open && (
@@ -397,9 +319,11 @@ export default function ExportCsvButton({
                 count={bookings.length}
                 disabled={bookings.length === 0}
                 onClick={() =>
-                  exportRows(
-                    bookings,
-                    `reservations-filtre-${format(new Date(), "yyyy-MM-dd")}.csv`
+                  runExport(() =>
+                    exportRows(
+                      bookings,
+                      `reservations-filtre-${format(new Date(), "yyyy-MM-dd")}.xlsx`
+                    )
                   )
                 }
               />
@@ -475,7 +399,12 @@ export default function ExportCsvButton({
               count={weekRows.length}
               disabled={weekRows.length === 0}
               onClick={() =>
-                exportRows(weekRows, `reservations-semaine-${weekFrom}.csv`)
+                runExport(() =>
+                  exportRows(
+                    weekRows,
+                    `reservations-semaine-${weekFrom}.xlsx`
+                  )
+                )
               }
             />
 
@@ -485,9 +414,11 @@ export default function ExportCsvButton({
               count={monthRows.length}
               disabled={monthRows.length === 0}
               onClick={() =>
-                exportRows(
-                  monthRows,
-                  `reservations-mois-${monthFrom.slice(0, 7)}.csv`
+                runExport(() =>
+                  exportRows(
+                    monthRows,
+                    `reservations-mois-${monthFrom.slice(0, 7)}.xlsx`
+                  )
                 )
               }
             />
@@ -505,9 +436,12 @@ export default function ExportCsvButton({
                   count={dailyWeek.length}
                   disabled={dailyWeek.length === 0}
                   onClick={() =>
-                    exportDaily(
-                      dailyWeek,
-                      `stats-jour-semaine-${weekFrom}.csv`
+                    runExport(() =>
+                      exportDaily(
+                        dailyWeek,
+                        `stats-jour-semaine-${weekFrom}.xlsx`,
+                        `Semaine ${formatExportDateFr(weekFrom)} → ${formatExportDateFr(weekTo)}`
+                      )
                     )
                   }
                 />
@@ -517,9 +451,12 @@ export default function ExportCsvButton({
                   count={dailyMonth.length}
                   disabled={dailyMonth.length === 0}
                   onClick={() =>
-                    exportDaily(
-                      dailyMonth,
-                      `stats-jour-mois-${monthFrom.slice(0, 7)}.csv`
+                    runExport(() =>
+                      exportDaily(
+                        dailyMonth,
+                        `stats-jour-mois-${monthFrom.slice(0, 7)}.xlsx`,
+                        `Mois ${formatExportDateFr(monthFrom)} → ${formatExportDateFr(monthTo)}`
+                      )
                     )
                   }
                 />
@@ -534,9 +471,11 @@ export default function ExportCsvButton({
                   count={bookings.length}
                   disabled={bookings.length === 0}
                   onClick={() =>
-                    exportRows(
-                      bookings,
-                      `statistiques-detail-${format(new Date(), "yyyy-MM-dd")}.csv`
+                    runExport(() =>
+                      exportRows(
+                        bookings,
+                        `statistiques-detail-${format(new Date(), "yyyy-MM-dd")}.xlsx`
+                      )
                     )
                   }
                 />

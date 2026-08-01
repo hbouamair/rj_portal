@@ -699,7 +699,7 @@ export async function deletePromoCode(id: number): Promise<ActionResult> {
   }
 }
 
-/** Fetch all bookings for one exact calendar day (CSV export). */
+/** Fetch all bookings for one exact calendar day (Excel export). */
 export async function fetchBookingsForExportDay(
   date: string,
   filters?: { status?: string; studioId?: number }
