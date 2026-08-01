@@ -14,7 +14,8 @@ export default async function AdminStudiosPage() {
           <p className="admin-eyebrow">Catalogue</p>
           <h1 className="admin-page-title">Studios</h1>
           <p className="admin-page-subtitle">
-            Tarifs et infos — appliqués immédiatement aux nouvelles réservations.
+            Tarifs, photos et infos — appliqués immédiatement aux nouvelles
+            réservations.
           </p>
         </div>
         <div className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-4">

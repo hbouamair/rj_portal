@@ -17,6 +17,7 @@ create table if not exists public.studios (
   price_peak_mad integer not null check (price_peak_mad >= 0),
   price_offpeak_mad integer not null check (price_offpeak_mad >= 0),
   image_url text,
+  gallery_urls text[] not null default '{}',
   features text[] not null default '{}',
   popular boolean not null default false,
   active boolean not null default true,
@@ -131,6 +132,25 @@ alter table public.bookings
   add column if not exists subtotal_price_mad numeric(10,2),
   add column if not exists discount_amount_mad numeric(10,2) default 0;
 
+alter table public.bookings
+  add column if not exists course_type text not null default 'group'
+    check (course_type in ('group', 'private'));
+
+alter table public.bookings
+  add column if not exists regular_course_count integer
+    check (regular_course_count is null or regular_course_count >= 1);
+
+alter table public.bookings
+  add column if not exists package_group_id uuid;
+
+alter table public.bookings
+  add column if not exists package_index integer
+    check (package_index is null or package_index >= 1);
+
+create index if not exists bookings_package_group_id_idx
+  on public.bookings (package_group_id)
+  where package_group_id is not null;
+
 -- Public availability: time slots only (no client PII)
 create or replace function public.get_busy_slots(p_studio_id int, p_date date)
 returns table (start_minutes int, duration_minutes int)
@@ -188,8 +208,8 @@ values
 on conflict do nothing;
 
 -- Default: open every day 08:00-22:00.
--- Peak hours ("heures pleines"): weekdays 17:00-22:00 + all day on weekends.
--- Everything else is off-peak ("heures creuses"). Editable in the admin dashboard.
+-- Peak hours ("heures pleines"): weekdays 17:00-22:00; weekends 08:00-09:00 & 11:00-22:00.
+-- Weekend off-peak ("heures creuses"): 09:00-11:00 Saturday & Sunday. Editable in admin.
 insert into public.settings (id, opening_hours, peak_windows, paypal_email, paypal_link, bank_details, confirmation_deadline_hours, reminder_hours_before)
 values (
   1,
@@ -204,7 +224,8 @@ values (
   }'::jsonb,
   '[
     {"days": [1, 2, 3, 4, 5], "start": "17:00", "end": "22:00"},
-    {"days": [0, 6], "start": "08:00", "end": "22:00"}
+    {"days": [0, 6], "start": "08:00", "end": "09:00"},
+    {"days": [0, 6], "start": "11:00", "end": "22:00"}
   ]'::jsonb,
   'contact@studiorj.ma',
   null,

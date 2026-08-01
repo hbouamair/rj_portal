@@ -7,6 +7,7 @@ export interface Studio {
   price_peak_mad: number;
   price_offpeak_mad: number;
   image_url: string | null;
+  gallery_urls?: string[];
   features: string[];
   popular: boolean;
   active: boolean;
@@ -52,6 +53,13 @@ export interface PromoCode {
   updated_at: string;
 }
 
+export type CourseType = "group" | "private";
+
+export const COURSE_TYPE_LABELS: Record<CourseType, string> = {
+  group: "Cours en groupe (3 personnes et +)",
+  private: "Cours privé (max 3 personnes)",
+};
+
 export type PaymentMethod = "paypal" | "virement" | "cash";
 
 export type BookingStatus =
@@ -72,6 +80,12 @@ export interface Booking {
   subtotal_price_mad: number | null;
   discount_amount_mad: number | null;
   promo_code: string | null;
+  course_type?: CourseType;
+  regular_course_count?: number | null;
+  /** Shared by all sessions of a multi-booking package. */
+  package_group_id?: string | null;
+  /** 1-based index within the package. */
+  package_index?: number | null;
   customer_name: string;
   customer_email: string;
   customer_phone: string;

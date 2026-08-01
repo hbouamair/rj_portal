@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import AdminNav from "@/components/admin/AdminNav";
+import { AdminFeedbackProvider } from "@/components/admin/AdminFeedback";
 
 export const metadata: Metadata = {
   title: "Administration | RJ Studio",
@@ -23,13 +24,15 @@ export default async function AdminLayout({
   }
 
   return (
-    <div className="admin-shell">
-      <AdminNav userEmail={user.email ?? ""} />
-      <main className="lg:pl-80">
-        <div className="px-4 sm:px-6 lg:px-8 py-6 pt-20 lg:pt-6 lg:pr-6 min-h-screen">
-          {children}
-        </div>
-      </main>
-    </div>
+    <AdminFeedbackProvider>
+      <div className="admin-shell">
+        <AdminNav userEmail={user.email ?? ""} />
+        <main className="lg:pl-80">
+          <div className="px-4 sm:px-6 lg:px-8 py-6 pt-20 lg:pt-6 lg:pr-6 min-h-screen">
+            {children}
+          </div>
+        </main>
+      </div>
+    </AdminFeedbackProvider>
   );
 }

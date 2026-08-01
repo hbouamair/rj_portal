@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   addMonths,
@@ -32,27 +31,50 @@ import {
   PartyPopper,
   Sparkles,
   Tag,
+  Trash2,
   Users,
 } from "lucide-react";
-import type { PaymentMethod, Settings, Studio } from "@/lib/booking/types";
+import type { CourseType, PaymentMethod, Settings, Studio } from "@/lib/booking/types";
 import { PAYMENT_METHOD_LABELS } from "@/lib/booking/types";
 import type { BusyInterval } from "@/lib/booking/pricing";
 import {
   computeAvailableStartTimes,
-  computeBookingPrice,
   durationOptions,
   formatDurationLabel,
   formatMad,
   minutesToTimeString,
 } from "@/lib/booking/pricing";
+import {
+  computeBookingPriceWithDiscounts,
+  computeMultiSlotPackagePrice,
+  filterStudiosForCourseType,
+  getEffectiveStudioPrices,
+  getPaidCoursesForPackage,
+  PRIVATE_COURSE_DISCOUNT_PERCENT,
+  REGULAR_COURSE_MIN_COUNT,
+  regularCourseOfferLabel,
+  type BookingSlotInput,
+  type MultiSlotPackageBreakdown,
+} from "@/lib/booking/discounts";
+import { getStudioImages } from "@/lib/booking/studio-images";
+import StudioImageCarousel from "@/components/studios/StudioImageCarousel";
 
 interface Props {
   studios: Studio[];
   settings: Settings;
 }
 
+type SessionMode = "single" | "multi";
+
 interface BookingResult {
   reference: string;
+  references?: string[];
+  slots?: Array<{
+    reference: string;
+    date: string;
+    startMinutes: number;
+    totalPriceMad: number;
+  }>;
   totalPriceMad: number;
   subtotalPriceMad?: number | null;
   discountAmountMad?: number | null;
@@ -68,7 +90,16 @@ interface AppliedPromo {
   totalMad: number;
 }
 
-const STEPS = ["Studio", "Date & heure", "Coordonnées", "Confirmé"];
+const STEPS = [
+  "Type de cours",
+  "Séances",
+  "Studio",
+  "Créneaux",
+  "Coordonnées",
+  "Confirmé",
+];
+const MIN_MULTI_SESSIONS = 2;
+const MAX_MULTI_SESSIONS = 52;
 
 const stepMotion = {
   initial: { opacity: 0, y: 18 },
@@ -79,12 +110,16 @@ const stepMotion = {
 
 export default function BookingWizard({ studios, settings }: Props) {
   const [step, setStep] = useState(0);
+  const [courseType, setCourseType] = useState<CourseType | null>(null);
+  const [sessionMode, setSessionMode] = useState<SessionMode | null>(null);
+  const [multiCount, setMultiCount] = useState(MIN_MULTI_SESSIONS);
   const [studio, setStudio] = useState<Studio | null>(null);
 
   const [month, setMonth] = useState(() => startOfMonth(new Date()));
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [duration, setDuration] = useState(60);
   const [startMinutes, setStartMinutes] = useState<number | null>(null);
+  const [confirmedSlots, setConfirmedSlots] = useState<BookingSlotInput[]>([]);
   const [busy, setBusy] = useState<BusyInterval[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
 
@@ -102,6 +137,9 @@ export default function BookingWizard({ studios, settings }: Props) {
   const [result, setResult] = useState<BookingResult | null>(null);
   const wizardRef = useRef<HTMLDivElement>(null);
   const skipInitialScroll = useRef(true);
+
+  const targetSlotCount = sessionMode === "multi" ? multiCount : 1;
+  const isMulti = sessionMode === "multi";
 
   useEffect(() => {
     if (skipInitialScroll.current) {
@@ -140,15 +178,26 @@ export default function BookingWizard({ studios, settings }: Props) {
     }
   }, [studio, selectedDate, loadAvailability]);
 
+  const busyWithLocal = useMemo(() => {
+    if (!selectedDate) return busy;
+    const local = confirmedSlots
+      .filter((s) => s.date === selectedDate)
+      .map((s) => ({
+        start_minutes: s.startMinutes,
+        duration_minutes: duration,
+      }));
+    return [...busy, ...local];
+  }, [busy, confirmedSlots, selectedDate, duration]);
+
   const availableStarts = useMemo(() => {
     if (!selectedDate) return [];
     return computeAvailableStartTimes({
       settings,
       date: selectedDate,
       durationMinutes: duration,
-      busy,
+      busy: busyWithLocal,
     });
-  }, [settings, selectedDate, duration, busy]);
+  }, [settings, selectedDate, duration, busyWithLocal]);
 
   useEffect(() => {
     if (startMinutes !== null && !availableStarts.includes(startMinutes)) {
@@ -156,54 +205,164 @@ export default function BookingWizard({ studios, settings }: Props) {
     }
   }, [availableStarts, startMinutes]);
 
-  // Peak / off-peak / mixed classification + price for every selectable slot
+  const visibleStudios = useMemo(
+    () => (courseType ? filterStudiosForCourseType(studios, courseType) : studios),
+    [studios, courseType]
+  );
+
+  const effectiveStudio = useMemo(
+    () =>
+      studio && courseType
+        ? { ...studio, ...getEffectiveStudioPrices(studio, courseType) }
+        : studio,
+    [studio, courseType]
+  );
+
+  // Peak / off-peak / mixed classification + per-session price for each start
   const slotInfo = useMemo(() => {
     const map = new Map<
       number,
       { total: number; kind: "peak" | "off" | "mixed" }
     >();
-    if (!studio || !selectedDate) return map;
+    if (!studio || !courseType || !selectedDate) return map;
     for (const m of availableStarts) {
-      const p = computeBookingPrice(
+      const p = computeBookingPriceWithDiscounts({
         studio,
-        selectedDate,
-        m,
-        duration,
-        settings.peak_windows
-      );
+        courseType,
+        date: selectedDate,
+        startMinutes: m,
+        durationMinutes: duration,
+        peakWindows: settings.peak_windows,
+        regularCourseCount: 1,
+      });
+      const base = p.basePrice;
       map.set(m, {
-        total: p.totalMad,
+        total: p.sessionPriceMad,
         kind:
-          p.peakMinutes > 0 && p.offPeakMinutes > 0
+          base.peakMinutes > 0 && base.offPeakMinutes > 0
             ? "mixed"
-            : p.peakMinutes > 0
+            : base.peakMinutes > 0
               ? "peak"
               : "off",
       });
     }
     return map;
-  }, [studio, selectedDate, duration, availableStarts, settings.peak_windows]);
+  }, [
+    studio,
+    courseType,
+    selectedDate,
+    duration,
+    availableStarts,
+    settings.peak_windows,
+  ]);
 
-  const price = useMemo(() => {
-    if (!studio || !selectedDate || startMinutes === null) return null;
-    return computeBookingPrice(
+  const singlePriceBreakdown = useMemo(() => {
+    if (
+      isMulti ||
+      !studio ||
+      !courseType ||
+      !selectedDate ||
+      startMinutes === null
+    ) {
+      return null;
+    }
+    return computeBookingPriceWithDiscounts({
       studio,
-      selectedDate,
+      courseType,
+      date: selectedDate,
       startMinutes,
-      duration,
-      settings.peak_windows
-    );
-  }, [studio, selectedDate, startMinutes, duration, settings.peak_windows]);
+      durationMinutes: duration,
+      peakWindows: settings.peak_windows,
+      regularCourseCount: 1,
+    });
+  }, [
+    isMulti,
+    studio,
+    courseType,
+    selectedDate,
+    startMinutes,
+    duration,
+    settings.peak_windows,
+  ]);
 
-  const displayTotalMad = appliedPromo?.totalMad ?? price?.totalMad ?? null;
+  const multiPriceBreakdown: MultiSlotPackageBreakdown | null = useMemo(() => {
+    if (!isMulti || !studio || !courseType || confirmedSlots.length === 0)
+      return null;
+    return computeMultiSlotPackagePrice({
+      studio,
+      courseType,
+      slots: confirmedSlots,
+      durationMinutes: duration,
+      peakWindows: settings.peak_windows,
+    });
+  }, [
+    isMulti,
+    studio,
+    courseType,
+    confirmedSlots,
+    duration,
+    settings.peak_windows,
+  ]);
+
+  const packageReady =
+    !isMulti
+      ? singlePriceBreakdown != null
+      : confirmedSlots.length === targetSlotCount && multiPriceBreakdown != null;
+
+  const totalBeforePromoMad = isMulti
+    ? multiPriceBreakdown?.totalBeforePromoMad ?? null
+    : singlePriceBreakdown?.totalBeforePromoMad ?? null;
+
+  const displayTotalMad =
+    appliedPromo?.totalMad ?? totalBeforePromoMad ?? null;
+
+  function resetSchedule() {
+    setSelectedDate(null);
+    setStartMinutes(null);
+    setConfirmedSlots([]);
+    setAppliedPromo(null);
+  }
+
+  function handleDurationChange(next: number) {
+    setDuration(next);
+    setStartMinutes(null);
+    if (isMulti) {
+      setConfirmedSlots([]);
+      setAppliedPromo(null);
+    }
+  }
+
+  function selectStartTime(m: number) {
+    if (!selectedDate) return;
+    if (!isMulti) {
+      setStartMinutes(m);
+      return;
+    }
+    if (confirmedSlots.length >= targetSlotCount) return;
+    const exists = confirmedSlots.some(
+      (s) => s.date === selectedDate && s.startMinutes === m
+    );
+    if (exists) return;
+    setConfirmedSlots((prev) => [
+      ...prev,
+      { date: selectedDate, startMinutes: m },
+    ]);
+    setStartMinutes(null);
+    setAppliedPromo(null);
+  }
+
+  function removeConfirmedSlot(index: number) {
+    setConfirmedSlots((prev) => prev.filter((_, i) => i !== index));
+    setAppliedPromo(null);
+  }
 
   async function applyPromoCode() {
-    if (!price || !promoInput.trim()) return;
+    if (totalBeforePromoMad == null || !promoInput.trim()) return;
     setValidatingPromo(true);
     setPromoError(null);
     try {
       const res = await fetch(
-        `/api/promo/validate?code=${encodeURIComponent(promoInput.trim())}&subtotal=${price.totalMad}`
+        `/api/promo/validate?code=${encodeURIComponent(promoInput.trim())}&subtotal=${totalBeforePromoMad}`
       );
       const json = await res.json();
       if (!json.valid) {
@@ -232,7 +391,16 @@ export default function BookingWizard({ studios, settings }: Props) {
   }
 
   async function submitBooking() {
-    if (!studio || !selectedDate || startMinutes === null) return;
+    if (!studio || !courseType || !packageReady) return;
+
+    const slots: BookingSlotInput[] = isMulti
+      ? confirmedSlots
+      : selectedDate && startMinutes !== null
+        ? [{ date: selectedDate, startMinutes }]
+        : [];
+
+    if (slots.length !== targetSlotCount) return;
+
     setSubmitting(true);
     setError(null);
     try {
@@ -241,8 +409,8 @@ export default function BookingWizard({ studios, settings }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           studioId: studio.id,
-          date: selectedDate,
-          startMinutes,
+          courseType,
+          slots,
           durationMinutes: duration,
           name,
           email,
@@ -255,14 +423,14 @@ export default function BookingWizard({ studios, settings }: Props) {
       const json = await res.json();
       if (!res.ok) {
         setError(json.error ?? "Une erreur s'est produite.");
-        if (res.status === 409 && selectedDate) {
-          loadAvailability(studio.id, selectedDate);
-          setStep(1);
+        if (res.status === 409) {
+          if (selectedDate) loadAvailability(studio.id, selectedDate);
+          setStep(3);
         }
         return;
       }
       setResult(json as BookingResult);
-      setStep(3);
+      setStep(5);
     } catch {
       setError(
         "Impossible d'envoyer la réservation. Vérifiez votre connexion."
@@ -271,6 +439,10 @@ export default function BookingWizard({ studios, settings }: Props) {
       setSubmitting(false);
     }
   }
+
+  const scheduleComplete = isMulti
+    ? confirmedSlots.length === targetSlotCount
+    : selectedDate != null && startMinutes !== null;
 
   const detailsValid =
     name.trim().length > 1 &&
@@ -284,46 +456,140 @@ export default function BookingWizard({ studios, settings }: Props) {
       <AnimatePresence mode="wait">
         <motion.div key={step} {...stepMotion}>
           {step === 0 && (
-            <StudioStep
-              studios={studios}
-              selected={studio}
-              onSelect={(s) => {
-                setStudio(s);
+            <CourseTypeStep
+              selected={courseType}
+              onSelect={(type) => {
+                setCourseType(type);
+                setStudio(null);
+                setSessionMode(null);
+                resetSchedule();
                 setStep(1);
               }}
             />
           )}
 
-          {step === 1 && studio && (
+          {step === 1 && courseType && (
+            <SessionCountStep
+              mode={sessionMode}
+              multiCount={multiCount}
+              onMultiCountChange={(n) => {
+                setMultiCount(n);
+                setConfirmedSlots([]);
+                setAppliedPromo(null);
+              }}
+              onSelect={(mode) => {
+                setSessionMode(mode);
+                resetSchedule();
+                setStep(2);
+              }}
+              onBack={() => setStep(0)}
+            />
+          )}
+
+          {step === 2 && courseType && sessionMode && (
+            <StudioStep
+              studios={visibleStudios}
+              courseType={courseType}
+              selected={studio}
+              onSelect={(s) => {
+                setStudio(s);
+                resetSchedule();
+                setStep(3);
+              }}
+              onBack={() => setStep(1)}
+              backLabel="Nombre de séances"
+            />
+          )}
+
+          {step === 3 && studio && courseType && sessionMode && (
             <div className="space-y-5">
               <div className="flex flex-wrap items-center gap-3 mb-1">
+                <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-charcoal/5 text-xs font-semibold text-charcoal shadow-sm">
+                  <Users className="w-3.5 h-3.5 text-secondary-500" aria-hidden />
+                  {courseType === "private" ? "Cours privé" : "Cours en groupe"}
+                </span>
                 <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-charcoal/5 text-xs font-semibold text-charcoal shadow-sm">
                   <Music className="w-3.5 h-3.5 text-primary-500" aria-hidden />
                   {studio.name}
                 </span>
+                <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-charcoal/5 text-xs font-semibold text-charcoal shadow-sm">
+                  <Calendar className="w-3.5 h-3.5 text-secondary-500" aria-hidden />
+                  {isMulti ? `${targetSlotCount} séances` : "1 séance"}
+                </span>
                 <button
                   type="button"
-                  onClick={() => setStep(0)}
+                  onClick={() => setStep(2)}
                   className="text-xs font-semibold text-primary-600 hover:text-primary-500 cursor-pointer transition-colors duration-200"
                 >
                   Changer de studio
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              {isMulti && (
+                <div className="book-card px-4 py-3 sm:px-5 border-secondary-100/80">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                    <div className="min-w-0">
+                      <p className="font-display font-bold text-charcoal text-sm sm:text-base">
+                        Sélectionnez {targetSlotCount} créneaux
+                        <span className="ml-2 font-semibold text-primary-600 tabular-nums">
+                          {confirmedSlots.length}/{targetSlotCount}
+                        </span>
+                      </p>
+                      <p className="text-xs text-soft-charcoal mt-0.5 truncate">
+                        {regularCourseOfferLabel()}
+                      </p>
+                    </div>
+                    <div
+                      className="h-1.5 w-full sm:w-40 sm:flex-none rounded-full bg-charcoal/5 overflow-hidden"
+                      aria-hidden
+                    >
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-primary-500 to-secondary-500 transition-all duration-300"
+                        style={{
+                          width: `${Math.min(
+                            100,
+                            (confirmedSlots.length / targetSlotCount) * 100
+                          )}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div
+                className={
+                  isMulti
+                    ? "grid grid-cols-1 lg:grid-cols-3 gap-5 items-start"
+                    : "grid grid-cols-1 lg:grid-cols-2 gap-5"
+                }
+              >
+                <div
+                  className={
+                    isMulti
+                      ? "lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-5"
+                      : "contents"
+                  }
+                >
                 <div className="book-card p-5 sm:p-6">
                   <h3 className="flex items-center gap-2.5 font-display font-bold text-charcoal mb-5">
                     <span className="w-9 h-9 rounded-xl bg-primary-50 text-primary-600 flex items-center justify-center">
                       <Calendar className="w-4 h-4" aria-hidden />
                     </span>
-                    Date
+                    {isMulti && confirmedSlots.length < targetSlotCount
+                      ? `Date — séance ${confirmedSlots.length + 1}`
+                      : "Date"}
                   </h3>
                   <MonthCalendar
                     month={month}
                     onMonthChange={setMonth}
                     selectedDate={selectedDate}
-                    onSelect={setSelectedDate}
+                    onSelect={(d) => {
+                      setSelectedDate(d);
+                      setStartMinutes(null);
+                    }}
                     settings={settings}
+                    markedDates={confirmedSlots.map((s) => s.date)}
                   />
                 </div>
 
@@ -337,13 +603,18 @@ export default function BookingWizard({ studios, settings }: Props) {
 
                   <p className="text-xs font-semibold uppercase tracking-wider text-soft-charcoal mb-2.5">
                     Durée · min. 1h
+                    {isMulti && (
+                      <span className="normal-case font-medium tracking-normal ml-1">
+                        (identique pour toutes les séances)
+                      </span>
+                    )}
                   </p>
                   <div className="flex flex-wrap gap-2 mb-6">
                     {[60, 90, 120, 150, 180, 240].map((d) => (
                       <button
                         key={d}
                         type="button"
-                        onClick={() => setDuration(d)}
+                        onClick={() => handleDurationChange(d)}
                         className={
                           duration === d ? "book-chip-active" : "book-chip-idle"
                         }
@@ -352,13 +623,19 @@ export default function BookingWizard({ studios, settings }: Props) {
                       </button>
                     ))}
                     <select
-                      value={durationOptions().includes(duration) && duration > 240 ? duration : ""}
+                      value={
+                        durationOptions().includes(duration) && duration > 240
+                          ? duration
+                          : ""
+                      }
                       onChange={(e) => {
                         const v = Number(e.target.value);
-                        if (v) setDuration(v);
+                        if (v) handleDurationChange(v);
                       }}
                       className={`book-input w-auto min-h-11 ${
-                        duration > 240 ? "ring-2 ring-primary-500/40 bg-white" : ""
+                        duration > 240
+                          ? "ring-2 ring-primary-500/40 bg-white"
+                          : ""
                       }`}
                       aria-label="Durée plus longue"
                     >
@@ -375,6 +652,11 @@ export default function BookingWizard({ studios, settings }: Props) {
 
                   <p className="text-xs font-semibold uppercase tracking-wider text-soft-charcoal mb-1.5">
                     Heure de début
+                    {isMulti && confirmedSlots.length < targetSlotCount && (
+                      <span className="normal-case font-medium tracking-normal ml-1 text-primary-600">
+                        — cliquez pour ajouter
+                      </span>
+                    )}
                   </p>
                   <div className="flex flex-wrap gap-x-4 gap-y-1 mb-3 text-[11px] font-medium text-soft-charcoal">
                     <span className="inline-flex items-center gap-1.5">
@@ -382,17 +664,32 @@ export default function BookingWizard({ studios, settings }: Props) {
                         className="w-2 h-2 rounded-full bg-amber-400"
                         aria-hidden
                       />
-                      Heures pleines · {studio.price_peak_mad} MAD/h
+                      Heures pleines ·{" "}
+                      {effectiveStudio?.price_peak_mad ?? studio.price_peak_mad}{" "}
+                      MAD/h
                     </span>
                     <span className="inline-flex items-center gap-1.5">
                       <span
                         className="w-2 h-2 rounded-full bg-secondary-500"
                         aria-hidden
                       />
-                      Heures creuses · {studio.price_offpeak_mad} MAD/h
+                      Heures creuses ·{" "}
+                      {effectiveStudio?.price_offpeak_mad ??
+                        studio.price_offpeak_mad}{" "}
+                      MAD/h
                     </span>
+                    {courseType === "private" && (
+                      <span className="text-secondary-600 font-semibold">
+                        −{PRIVATE_COURSE_DISCOUNT_PERCENT}% cours privé
+                      </span>
+                    )}
                   </div>
-                  {!selectedDate ? (
+                  {isMulti && confirmedSlots.length >= targetSlotCount ? (
+                    <p className="text-sm text-secondary-700 bg-secondary-50 border border-secondary-100 rounded-2xl px-4 py-4">
+                      Les {targetSlotCount} créneaux sont sélectionnés. Vous
+                      pouvez en retirer un ci-dessus pour le remplacer.
+                    </p>
+                  ) : !selectedDate ? (
                     <p className="text-sm text-soft-charcoal py-6 text-center rounded-2xl bg-charcoal/[0.02] border border-dashed border-charcoal/10">
                       Sélectionnez d&apos;abord une date.
                     </p>
@@ -416,15 +713,15 @@ export default function BookingWizard({ studios, settings }: Props) {
                             : info?.kind === "off"
                               ? "heures creuses"
                               : "tarif mixte";
+                        const active =
+                          !isMulti && startMinutes === m;
                         return (
                           <button
                             key={m}
                             type="button"
-                            onClick={() => setStartMinutes(m)}
+                            onClick={() => selectStartTime(m)}
                             className={`${
-                              startMinutes === m
-                                ? "book-chip-active"
-                                : "book-chip-idle"
+                              active ? "book-chip-active" : "book-chip-idle"
                             } gap-1.5`}
                             title={
                               info
@@ -453,54 +750,142 @@ export default function BookingWizard({ studios, settings }: Props) {
                     </div>
                   )}
                 </div>
+                </div>
+
+                {isMulti && (
+                  <aside className="book-card p-4 sm:p-5 border-secondary-100/80 lg:sticky lg:top-28 flex flex-col min-h-0 max-h-[22rem] lg:max-h-[min(36rem,calc(100vh-9rem))]">
+                    <div className="shrink-0 mb-3">
+                      <h3 className="font-display font-bold text-charcoal text-sm">
+                        Séances sélectionnées
+                      </h3>
+                      <p className="text-xs text-soft-charcoal mt-0.5">
+                        {confirmedSlots.length === 0
+                          ? "Choisissez une date puis une heure."
+                          : `${confirmedSlots.length} sur ${targetSlotCount}`}
+                      </p>
+                    </div>
+
+                    {confirmedSlots.length === 0 ? (
+                      <div className="flex-1 flex items-center justify-center rounded-xl border border-dashed border-charcoal/10 bg-charcoal/[0.02] px-3 py-6">
+                        <p className="text-xs text-soft-charcoal text-center leading-relaxed">
+                          Aucun créneau pour l&apos;instant.
+                        </p>
+                      </div>
+                    ) : (
+                      <ul className="flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-1.5 pr-1 -mr-0.5">
+                        {confirmedSlots.map((slot, index) => {
+                          const quote = multiPriceBreakdown?.slots[index];
+                          const showFree =
+                            confirmedSlots.length === targetSlotCount &&
+                            quote?.isFree;
+                          return (
+                            <li
+                              key={`${slot.date}-${slot.startMinutes}`}
+                              className="flex items-center justify-between gap-2 rounded-lg bg-charcoal/[0.02] border border-charcoal/5 px-2.5 py-1.5 text-xs"
+                            >
+                              <span className="text-charcoal capitalize min-w-0 leading-snug">
+                                <span className="font-semibold text-soft-charcoal mr-1.5">
+                                  {index + 1}.
+                                </span>
+                                {format(parseDateString(slot.date), "EEE d MMM", {
+                                  locale: fr,
+                                })}{" "}
+                                · {minutesToTimeString(slot.startMinutes)}
+                                {showFree && (
+                                  <span className="ml-1.5 text-[10px] font-bold text-secondary-600">
+                                    Offerte
+                                  </span>
+                                )}
+                              </span>
+                              <span className="flex items-center gap-1 shrink-0">
+                                {quote && (
+                                  <span className="font-semibold tabular-nums text-charcoal">
+                                    {showFree
+                                      ? formatMad(0)
+                                      : formatMad(quote.sessionPriceMad)}
+                                  </span>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => removeConfirmedSlot(index)}
+                                  className="min-w-8 min-h-8 inline-flex items-center justify-center rounded-lg text-soft-charcoal hover:text-accent-600 hover:bg-accent-50 transition-colors cursor-pointer"
+                                  aria-label={`Retirer la séance ${index + 1}`}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+
+                    {multiPriceBreakdown &&
+                      confirmedSlots.length === targetSlotCount && (
+                        <div className="shrink-0 mt-3 pt-3 border-t border-charcoal/5">
+                          <MultiPackageBreakdown
+                            breakdown={multiPriceBreakdown}
+                          />
+                        </div>
+                      )}
+                  </aside>
+                )}
               </div>
 
-              {price && selectedDate && startMinutes !== null && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="book-card p-5 sm:px-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-primary-100"
-                >
-                  <div>
-                    <p className="text-sm font-medium text-charcoal capitalize">
-                      {format(parseDateString(selectedDate), "EEEE d MMMM", {
-                        locale: fr,
-                      })}{" "}
-                      · {minutesToTimeString(startMinutes)} –{" "}
-                      {minutesToTimeString(startMinutes + duration)}
-                    </p>
-                    <p className="text-xs text-soft-charcoal mt-1">
-                      {price.peakMinutes > 0 &&
-                        `${formatDurationLabel(price.peakMinutes)} heures pleines (${formatMad(
-                          (price.peakMinutes / 60) * studio.price_peak_mad
-                        )})`}
-                      {price.peakMinutes > 0 &&
-                        price.offPeakMinutes > 0 &&
-                        " · "}
-                      {price.offPeakMinutes > 0 &&
-                        `${formatDurationLabel(price.offPeakMinutes)} heures creuses (${formatMad(
-                          (price.offPeakMinutes / 60) * studio.price_offpeak_mad
-                        )})`}
-                    </p>
-                  </div>
-                  <div className="text-3xl font-display font-bold text-charcoal tracking-tight">
-                    {formatMad(price.totalMad)}
-                  </div>
-                </motion.div>
-              )}
+              {!isMulti &&
+                singlePriceBreakdown &&
+                selectedDate &&
+                startMinutes !== null &&
+                effectiveStudio && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="book-card p-5 sm:px-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-primary-100"
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-charcoal capitalize">
+                        {format(parseDateString(selectedDate), "EEEE d MMMM", {
+                          locale: fr,
+                        })}{" "}
+                        · {minutesToTimeString(startMinutes)} –{" "}
+                        {minutesToTimeString(startMinutes + duration)}
+                      </p>
+                      <p className="text-xs text-soft-charcoal mt-1">
+                        {singlePriceBreakdown.basePrice.peakMinutes > 0 &&
+                          `${formatDurationLabel(singlePriceBreakdown.basePrice.peakMinutes)} heures pleines (${formatMad(
+                            (singlePriceBreakdown.basePrice.peakMinutes / 60) *
+                              effectiveStudio.price_peak_mad
+                          )})`}
+                        {singlePriceBreakdown.basePrice.peakMinutes > 0 &&
+                          singlePriceBreakdown.basePrice.offPeakMinutes > 0 &&
+                          " · "}
+                        {singlePriceBreakdown.basePrice.offPeakMinutes > 0 &&
+                          `${formatDurationLabel(singlePriceBreakdown.basePrice.offPeakMinutes)} heures creuses (${formatMad(
+                            (singlePriceBreakdown.basePrice.offPeakMinutes /
+                              60) *
+                              effectiveStudio.price_offpeak_mad
+                          )})`}
+                      </p>
+                    </div>
+                    <div className="text-3xl font-display font-bold text-charcoal tracking-tight">
+                      {formatMad(singlePriceBreakdown.totalBeforePromoMad)}
+                    </div>
+                  </motion.div>
+                )}
 
               <WizardNav
-                onBack={() => setStep(0)}
-                onNext={() => setStep(2)}
-                nextDisabled={startMinutes === null}
+                onBack={() => setStep(2)}
+                onNext={() => setStep(4)}
+                nextDisabled={!scheduleComplete}
               />
             </div>
           )}
 
-          {step === 2 &&
+          {step === 4 &&
             studio &&
-            selectedDate &&
-            startMinutes !== null && (
+            courseType &&
+            sessionMode &&
+            scheduleComplete && (
               <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
                 <div className="lg:col-span-3 book-card p-5 sm:p-7 space-y-5">
                   <div>
@@ -593,7 +978,11 @@ export default function BookingWizard({ studios, settings }: Props) {
                         <button
                           type="button"
                           onClick={applyPromoCode}
-                          disabled={!promoInput.trim() || validatingPromo || !price}
+                          disabled={
+                            !promoInput.trim() ||
+                            validatingPromo ||
+                            totalBeforePromoMad == null
+                          }
                           className="book-btn-ghost min-h-12 shrink-0"
                         >
                           {validatingPromo ? (
@@ -661,7 +1050,7 @@ export default function BookingWizard({ studios, settings }: Props) {
                   <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
                     <button
                       type="button"
-                      onClick={() => setStep(1)}
+                      onClick={() => setStep(3)}
                       className="book-btn-ghost min-h-12"
                     >
                       <ArrowLeft className="w-4 h-4" aria-hidden />
@@ -693,19 +1082,47 @@ export default function BookingWizard({ studios, settings }: Props) {
                     <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-soft-charcoal">
                       Récapitulatif
                     </p>
+                    <SummaryRow
+                      label="Type"
+                      value={
+                        courseType === "private"
+                          ? "Cours privé"
+                          : "Cours en groupe"
+                      }
+                    />
                     <SummaryRow label="Studio" value={studio.name} />
                     <SummaryRow
-                      label="Date"
-                      value={format(
-                        parseDateString(selectedDate),
-                        "EEE d MMM yyyy",
-                        { locale: fr }
-                      )}
+                      label="Séances"
+                      value={
+                        isMulti
+                          ? `${confirmedSlots.length} créneaux`
+                          : "1 séance"
+                      }
                     />
-                    <SummaryRow
-                      label="Horaire"
-                      value={`${minutesToTimeString(startMinutes)} – ${minutesToTimeString(startMinutes + duration)}`}
-                    />
+                    {!isMulti && selectedDate && startMinutes !== null && (
+                      <>
+                        <SummaryRow
+                          label="Date"
+                          value={format(
+                            parseDateString(selectedDate),
+                            "EEE d MMM yyyy",
+                            { locale: fr }
+                          )}
+                        />
+                        <SummaryRow
+                          label="Horaire"
+                          value={`${minutesToTimeString(startMinutes)} – ${minutesToTimeString(startMinutes + duration)}`}
+                        />
+                      </>
+                    )}
+                    {isMulti &&
+                      confirmedSlots.map((slot, i) => (
+                        <SummaryRow
+                          key={`${slot.date}-${slot.startMinutes}`}
+                          label={`Séance ${i + 1}`}
+                          value={`${format(parseDateString(slot.date), "EEE d MMM", { locale: fr })} · ${minutesToTimeString(slot.startMinutes)}`}
+                        />
+                      ))}
                     <SummaryRow
                       label="Durée"
                       value={formatDurationLabel(duration)}
@@ -714,11 +1131,18 @@ export default function BookingWizard({ studios, settings }: Props) {
                       label="Paiement"
                       value={PAYMENT_METHOD_LABELS[paymentMethod]}
                     />
-                    {appliedPromo && price && (
+                    {multiPriceBreakdown &&
+                      multiPriceBreakdown.freeCoursesIncluded > 0 && (
+                        <SummaryRow
+                          label={`Cours offert${multiPriceBreakdown.freeCoursesIncluded > 1 ? "s" : ""}`}
+                          value={`−${formatMad(multiPriceBreakdown.regularCourseDiscountMad)}`}
+                        />
+                      )}
+                    {appliedPromo && totalBeforePromoMad != null && (
                       <>
                         <SummaryRow
-                          label="Sous-total"
-                          value={formatMad(price.totalMad)}
+                          label="Avant promo"
+                          value={formatMad(totalBeforePromoMad)}
                         />
                         <SummaryRow
                           label={`Promo ${appliedPromo.code}`}
@@ -731,7 +1155,9 @@ export default function BookingWizard({ studios, settings }: Props) {
                         Total
                       </span>
                       <span className="text-2xl font-display font-bold text-charcoal tracking-tight">
-                        {displayTotalMad != null ? formatMad(displayTotalMad) : "—"}
+                        {displayTotalMad != null
+                          ? formatMad(displayTotalMad)
+                          : "—"}
                       </span>
                     </div>
                   </div>
@@ -739,17 +1165,21 @@ export default function BookingWizard({ studios, settings }: Props) {
               </div>
             )}
 
-          {step === 3 &&
-            result &&
-            studio &&
-            selectedDate &&
-            startMinutes !== null && (
+          {step === 5 && result && studio && courseType && (
               <ConfirmationStep
                 result={result}
                 studio={studio}
+                courseType={courseType}
                 settings={settings}
-                date={selectedDate}
-                startMinutes={startMinutes}
+                slots={
+                  result.slots?.map((s) => ({
+                    date: s.date,
+                    startMinutes: s.startMinutes,
+                  })) ??
+                  (selectedDate && startMinutes !== null
+                    ? [{ date: selectedDate, startMinutes }]
+                    : confirmedSlots)
+                }
                 duration={duration}
                 paymentMethod={paymentMethod}
               />
@@ -813,45 +1243,303 @@ function StepIndicator({ current }: { current: number }) {
   );
 }
 
-function StudioStep({
-  studios,
+function SessionCountStep({
+  mode,
+  multiCount,
+  onMultiCountChange,
+  onSelect,
+  onBack,
+}: {
+  mode: SessionMode | null;
+  multiCount: number;
+  onMultiCountChange: (n: number) => void;
+  onSelect: (mode: SessionMode) => void;
+  onBack: () => void;
+}) {
+  const [localMode, setLocalMode] = useState<SessionMode | null>(mode);
+
+  return (
+    <div className="space-y-5 max-w-3xl mx-auto">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h2 className="font-display font-bold text-xl text-charcoal tracking-tight">
+            Combien de séances ?
+          </h2>
+          <p className="text-sm text-soft-charcoal mt-1">
+            Une séance unique, ou plusieurs créneaux à choisir un par un.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onBack}
+          className="book-btn-ghost min-h-10 text-xs shrink-0"
+        >
+          <ArrowLeft className="w-4 h-4" aria-hidden />
+          Type de cours
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <motion.button
+          type="button"
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35 }}
+          onClick={() => {
+            setLocalMode("single");
+            onSelect("single");
+          }}
+          className={`book-card text-left p-6 sm:p-8 group cursor-pointer transition-all duration-200 hover:-translate-y-1 ${
+            localMode === "single"
+              ? "ring-2 ring-primary-500 ring-offset-2"
+              : ""
+          }`}
+        >
+          <div className="w-12 h-12 rounded-2xl bg-primary-50 text-primary-600 flex items-center justify-center mb-4">
+            <Calendar className="w-6 h-6" />
+          </div>
+          <h3 className="font-display font-bold text-xl text-charcoal mb-2">
+            Une séance
+          </h3>
+          <p className="text-sm text-soft-charcoal leading-relaxed">
+            Réservez une date et une heure — le parcours classique.
+          </p>
+        </motion.button>
+
+        <motion.button
+          type="button"
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, delay: 0.08 }}
+          onClick={() => setLocalMode("multi")}
+          className={`book-card text-left p-6 sm:p-8 group cursor-pointer transition-all duration-200 hover:-translate-y-1 ${
+            localMode === "multi"
+              ? "ring-2 ring-primary-500 ring-offset-2"
+              : ""
+          }`}
+        >
+          <div className="w-12 h-12 rounded-2xl bg-secondary-50 text-secondary-600 flex items-center justify-center mb-4">
+            <Sparkles className="w-6 h-6" />
+          </div>
+          <h3 className="font-display font-bold text-xl text-charcoal mb-2">
+            Plusieurs séances
+          </h3>
+          <p className="text-sm text-soft-charcoal leading-relaxed">
+            Choisissez plusieurs dates et horaires.{" "}
+            {regularCourseOfferLabel()}
+          </p>
+        </motion.button>
+      </div>
+
+      {localMode === "multi" && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="book-card p-5 sm:p-6 space-y-4 border-secondary-100/80"
+        >
+          <Field label="Nombre de séances à réserver">
+            <input
+              type="number"
+              min={MIN_MULTI_SESSIONS}
+              max={MAX_MULTI_SESSIONS}
+              value={multiCount}
+              onChange={(e) => {
+                const n = Number(e.target.value);
+                if (!Number.isFinite(n)) return;
+                onMultiCountChange(
+                  Math.min(
+                    MAX_MULTI_SESSIONS,
+                    Math.max(MIN_MULTI_SESSIONS, Math.round(n))
+                  )
+                );
+              }}
+              className="book-input min-h-12 max-w-[10rem]"
+            />
+          </Field>
+          <p className="text-xs text-soft-charcoal">
+            Exemple : {REGULAR_COURSE_MIN_COUNT} cours → vous payez{" "}
+            {REGULAR_COURSE_MIN_COUNT - 1}, le {REGULAR_COURSE_MIN_COUNT}
+            <sup>e</sup> est offert (les séances les moins chères).
+          </p>
+          {multiCount >= REGULAR_COURSE_MIN_COUNT && (
+            <p className="text-sm font-medium text-secondary-700 bg-secondary-50 border border-secondary-100 rounded-xl px-3 py-2">
+              Forfait {multiCount} séances ·{" "}
+              {Math.floor(multiCount / REGULAR_COURSE_MIN_COUNT)} offerte
+              {Math.floor(multiCount / REGULAR_COURSE_MIN_COUNT) > 1 ? "s" : ""}{" "}
+              · vous payez {getPaidCoursesForPackage(multiCount)}
+            </p>
+          )}
+          <div className="flex justify-end pt-1">
+            <button
+              type="button"
+              onClick={() => onSelect("multi")}
+              className="book-btn-primary min-h-12"
+            >
+              Continuer
+              <ArrowRight className="w-4 h-4" aria-hidden />
+            </button>
+          </div>
+        </motion.div>
+      )}
+    </div>
+  );
+}
+
+function CourseTypeStep({
   selected,
   onSelect,
 }: {
+  selected: CourseType | null;
+  onSelect: (type: CourseType) => void;
+}) {
+  const options: {
+    type: CourseType;
+    title: string;
+    description: string;
+    icon: React.ReactNode;
+    badge?: string;
+  }[] = [
+    {
+      type: "group",
+      title: "Cours en groupe",
+      description: "3 personnes et plus. Accès à tous les studios.",
+      icon: <Users className="w-6 h-6" />,
+    },
+    {
+      type: "private",
+      title: "Cours privé",
+      description: "Maximum 3 personnes. Studio 3 uniquement, −50% sur tous les tarifs.",
+      icon: <Sparkles className="w-6 h-6" />,
+      badge: "−50%",
+    },
+  ];
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-5 max-w-3xl mx-auto">
+      {options.map((opt, index) => (
+        <motion.button
+          key={opt.type}
+          type="button"
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, delay: index * 0.08 }}
+          onClick={() => onSelect(opt.type)}
+          className={`book-card text-left p-6 sm:p-8 group cursor-pointer transition-all duration-200 hover:-translate-y-1 ${
+            selected === opt.type
+              ? "ring-2 ring-primary-500 ring-offset-2"
+              : ""
+          }`}
+        >
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div className="w-12 h-12 rounded-2xl bg-primary-50 text-primary-600 flex items-center justify-center">
+              {opt.icon}
+            </div>
+            {opt.badge && (
+              <span className="px-2.5 py-1 rounded-full bg-secondary-100 text-secondary-700 text-xs font-bold">
+                {opt.badge}
+              </span>
+            )}
+          </div>
+          <h3 className="text-xl font-display font-bold text-charcoal mb-2">
+            {opt.title}
+          </h3>
+          <p className="text-sm text-soft-charcoal leading-relaxed mb-4">
+            {opt.description}
+          </p>
+          <span className="inline-flex items-center gap-2 text-primary-600 font-semibold font-nav text-sm group-hover:gap-3 transition-all duration-200">
+            Choisir
+            <ArrowRight className="w-4 h-4" aria-hidden />
+          </span>
+        </motion.button>
+      ))}
+    </div>
+  );
+}
+
+function StudioStep({
+  studios,
+  courseType,
+  selected,
+  onSelect,
+  onBack,
+  backLabel = "Retour",
+}: {
   studios: Studio[];
+  courseType: CourseType;
   selected: Studio | null;
   onSelect: (s: Studio) => void;
+  onBack: () => void;
+  backLabel?: string;
 }) {
+  const effectivePrices = (studio: Studio) =>
+    getEffectiveStudioPrices(studio, courseType);
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-      {studios.map((studio, index) => (
-        <motion.button
-          key={studio.id}
+    <div className="space-y-5">
+      <div className="flex items-center justify-between gap-3">
+        {courseType === "group" ? (
+          <p className="text-sm text-soft-charcoal">
+            Cours en groupe — choisissez votre studio.
+          </p>
+        ) : (
+          <span />
+        )}
+        <button
           type="button"
+          onClick={onBack}
+          className="book-btn-ghost min-h-10 text-xs shrink-0"
+        >
+          <ArrowLeft className="w-4 h-4" aria-hidden />
+          {backLabel}
+        </button>
+      </div>
+      <div
+        className={`grid gap-5 ${
+          studios.length === 1 ? "grid-cols-1 max-w-md mx-auto" : "grid-cols-1 md:grid-cols-3"
+        }`}
+      >
+      {studios.map((studio, index) => {
+        const prices = effectivePrices(studio);
+        return (
+        <motion.div
+          key={studio.id}
+          role="button"
+          tabIndex={0}
           initial={{ opacity: 0, y: 16, scale: 0.97 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 0.35, delay: index * 0.06 }}
           onClick={() => onSelect(studio)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onSelect(studio);
+            }
+          }}
           className={`book-card text-left overflow-hidden group cursor-pointer transition-all duration-200 hover:-translate-y-1 ${
             selected?.id === studio.id
               ? "ring-2 ring-primary-500 ring-offset-2 ring-offset-transparent"
               : ""
           }`}
         >
-          <div className="relative h-40 overflow-hidden">
-            {studio.image_url ? (
-              <Image
-                src={studio.image_url}
-                alt={studio.name}
-                fill
-                sizes="(max-width: 768px) 100vw, 33vw"
-                className="object-cover transition-transform duration-500 group-hover:scale-105"
-              />
-            ) : (
-              <div className="absolute inset-0 bg-gradient-to-br from-primary-400 to-secondary-500" />
-            )}
+          <div
+            className="relative h-40 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            <StudioImageCarousel
+              images={getStudioImages(studio)}
+              alt={studio.name}
+              className="h-full"
+              aspectClassName="h-40"
+              rounded={false}
+            />
             <div className="absolute inset-0 bg-gradient-to-t from-charcoal/70 via-charcoal/20 to-transparent" />
-            {studio.popular && (
+            {courseType === "private" && (
+              <span className="absolute top-3 left-3 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-secondary-500 text-white text-[10px] font-bold uppercase tracking-wide shadow-md">
+                −{PRIVATE_COURSE_DISCOUNT_PERCENT}%
+              </span>
+            )}
+            {studio.popular && courseType !== "private" && (
               <span className="absolute top-3 left-3 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-accent-500 text-white text-[10px] font-bold uppercase tracking-wide shadow-md">
                 <Sparkles className="w-3 h-3" aria-hidden />
                 Populaire
@@ -881,7 +1569,7 @@ function StudioStep({
                     className="w-3.5 h-3.5 text-secondary-500"
                     aria-hidden
                   />
-                  {studio.capacity_label}
+                  {courseType === "private" ? "Max 3 personnes" : studio.capacity_label}
                 </span>
               )}
             </div>
@@ -891,7 +1579,7 @@ function StudioStep({
                   Heures pleines
                 </span>
                 <span className="font-display font-bold text-charcoal">
-                  {formatMad(studio.price_peak_mad)}
+                  {formatMad(prices.price_peak_mad)}
                   <span className="text-xs font-semibold text-soft-charcoal">
                     /h
                   </span>
@@ -902,20 +1590,27 @@ function StudioStep({
                   Heures creuses
                 </span>
                 <span className="font-display font-bold text-secondary-600">
-                  {formatMad(studio.price_offpeak_mad)}
+                  {formatMad(prices.price_offpeak_mad)}
                   <span className="text-xs font-semibold text-soft-charcoal">
                     /h
                   </span>
                 </span>
               </div>
+              {courseType === "private" && (
+                <p className="text-[10px] text-secondary-600 font-semibold pt-1">
+                  Tarif standard barré : {formatMad(studio.price_peak_mad)}/h plein · {formatMad(studio.price_offpeak_mad)}/h creux
+                </p>
+              )}
             </div>
             <span className="inline-flex items-center gap-2 text-primary-600 font-semibold font-nav text-sm group-hover:gap-3 transition-all duration-200">
               Choisir ce studio
               <ArrowRight className="w-4 h-4" aria-hidden />
             </span>
           </div>
-        </motion.button>
-      ))}
+        </motion.div>
+      );
+      })}
+      </div>
     </div>
   );
 }
@@ -926,13 +1621,16 @@ function MonthCalendar({
   selectedDate,
   onSelect,
   settings,
+  markedDates = [],
 }: {
   month: Date;
   onMonthChange: (m: Date) => void;
   selectedDate: string | null;
   onSelect: (date: string) => void;
   settings: Settings;
+  markedDates?: string[];
 }) {
+  const marked = new Set(markedDates);
   const today = startOfToday();
   const maxMonth = startOfMonth(addMonths(today, 6));
   const days = eachDayOfInterval({
@@ -984,6 +1682,7 @@ function MonthCalendar({
           const isSelected =
             selectedDate !== null &&
             isSameDay(day, parseDateString(selectedDate));
+          const isMarked = marked.has(dateStr);
           const isToday = isSameDay(day, today);
           return (
             <button
@@ -991,17 +1690,25 @@ function MonthCalendar({
               type="button"
               disabled={disabled}
               onClick={() => onSelect(dateStr)}
-              className={`aspect-square min-h-10 rounded-xl text-sm font-semibold transition-all duration-200 ${
+              className={`relative aspect-square min-h-10 rounded-xl text-sm font-semibold transition-all duration-200 ${
                 isSelected
                   ? "bg-primary-500 text-white shadow-md shadow-primary-500/30"
                   : disabled
                     ? "text-charcoal/20 cursor-not-allowed"
-                    : isToday
-                      ? "text-primary-600 bg-primary-50 hover:bg-primary-100 cursor-pointer"
-                      : "text-charcoal hover:bg-primary-50 cursor-pointer"
+                    : isMarked
+                      ? "text-secondary-700 bg-secondary-50 hover:bg-secondary-100 cursor-pointer ring-1 ring-secondary-200"
+                      : isToday
+                        ? "text-primary-600 bg-primary-50 hover:bg-primary-100 cursor-pointer"
+                        : "text-charcoal hover:bg-primary-50 cursor-pointer"
               }`}
             >
               {format(day, "d")}
+              {isMarked && !isSelected && (
+                <span
+                  className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-secondary-500"
+                  aria-hidden
+                />
+              )}
             </button>
           );
         })}
@@ -1104,20 +1811,55 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+function MultiPackageBreakdown({
+  breakdown: b,
+}: {
+  breakdown: MultiSlotPackageBreakdown;
+}) {
+  const paid = getPaidCoursesForPackage(b.packageCourseCount);
+  return (
+    <div className="rounded-2xl bg-secondary-50/80 border border-secondary-100 px-4 py-3 space-y-1.5 text-sm">
+      <div className="flex justify-between gap-3 text-charcoal">
+        <span>Sous-total {b.packageCourseCount} séances</span>
+        <span className="font-semibold tabular-nums">
+          {formatMad(b.packageSubtotalMad)}
+        </span>
+      </div>
+      {b.freeCoursesIncluded > 0 && (
+        <div className="flex justify-between gap-3 text-secondary-700">
+          <span>
+            {b.freeCoursesIncluded} séance{b.freeCoursesIncluded > 1 ? "s" : ""}{" "}
+            offerte{b.freeCoursesIncluded > 1 ? "s" : ""} (les moins chères)
+          </span>
+          <span className="font-semibold tabular-nums">
+            −{formatMad(b.regularCourseDiscountMad)}
+          </span>
+        </div>
+      )}
+      <div className="flex justify-between gap-3 pt-1.5 border-t border-secondary-200/80 font-display font-bold text-charcoal">
+        <span>
+          Vous payez {paid} séance{paid > 1 ? "s" : ""}
+        </span>
+        <span className="tabular-nums">{formatMad(b.totalBeforePromoMad)}</span>
+      </div>
+    </div>
+  );
+}
+
 function ConfirmationStep({
   result,
   studio,
+  courseType,
   settings,
-  date,
-  startMinutes,
+  slots,
   duration,
   paymentMethod,
 }: {
   result: BookingResult;
   studio: Studio;
+  courseType: CourseType;
   settings: Settings;
-  date: string;
-  startMinutes: number;
+  slots: BookingSlotInput[];
   duration: number;
   paymentMethod: PaymentMethod;
 }) {
@@ -1129,6 +1871,7 @@ function ConfirmationStep({
     minute: "2-digit",
     timeZone: "Africa/Casablanca",
   });
+  const isPackage = slots.length > 1;
 
   return (
     <div className="max-w-2xl mx-auto space-y-5">
@@ -1152,33 +1895,45 @@ function ConfirmationStep({
               et suivez les instructions de paiement sur cette page.
             </>
           ) : (
-            <>Un email vient de vous être envoyé. Votre référence :</>
+            <>
+              Un email vient de vous être envoyé. Votre référence
+              {isPackage ? " principale" : ""} :
+            </>
           )}
         </p>
         <div className="inline-block px-6 py-3 rounded-2xl bg-primary-50 text-primary-600 font-display font-bold text-2xl tracking-[0.12em] mb-7 border border-primary-100">
           {result.reference}
         </div>
         <div className="text-left space-y-3 border-t border-charcoal/5 pt-6">
+          <SummaryRow
+            label="Type"
+            value={courseType === "private" ? "Cours privé" : "Cours en groupe"}
+          />
           <SummaryRow label="Studio" value={studio.name} />
-          <SummaryRow
-            label="Date"
-            value={format(parseDateString(date), "EEEE d MMMM yyyy", {
-              locale: fr,
-            })}
-          />
-          <SummaryRow
-            label="Horaire"
-            value={`${minutesToTimeString(startMinutes)} – ${minutesToTimeString(startMinutes + duration)}`}
-          />
-          {result.promoCode && result.subtotalPriceMad != null && (
+          {slots.map((slot, i) => (
+            <SummaryRow
+              key={`${slot.date}-${slot.startMinutes}`}
+              label={isPackage ? `Séance ${i + 1}` : "Date & horaire"}
+              value={`${format(parseDateString(slot.date), "EEEE d MMMM yyyy", {
+                locale: fr,
+              })} · ${minutesToTimeString(slot.startMinutes)} – ${minutesToTimeString(slot.startMinutes + duration)}`}
+            />
+          ))}
+          {result.references && result.references.length > 1 && (
+            <SummaryRow
+              label="Références"
+              value={result.references.join(" · ")}
+            />
+          )}
+          {result.subtotalPriceMad != null && (
             <SummaryRow
               label="Sous-total"
               value={formatMad(Number(result.subtotalPriceMad))}
             />
           )}
-          {result.promoCode && result.discountAmountMad != null && (
+          {result.discountAmountMad != null && Number(result.discountAmountMad) > 0 && (
             <SummaryRow
-              label={`Promo ${result.promoCode}`}
+              label={result.promoCode ? `Réductions (${result.promoCode})` : "Réductions"}
               value={`-${formatMad(Number(result.discountAmountMad))}`}
             />
           )}

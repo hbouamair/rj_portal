@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { CalendarRange, List, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import type { Studio } from "@/lib/booking/types";
 import { BOOKING_STATUS_LABELS } from "@/lib/booking/types";
 
@@ -14,29 +14,34 @@ export default function BookingFilters({ studios }: { studios: Studio[] }) {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const setParam = useCallback(
-    (key: string, value: string) => {
+    (key: string, value: string, resetPage = false) => {
       const params = new URLSearchParams(searchParams.toString());
       if (value) {
         params.set(key, value);
       } else {
         params.delete(key);
       }
+      if (resetPage) params.delete("page");
       router.replace(`${pathname}?${params.toString()}`);
     },
     [router, pathname, searchParams]
   );
 
-  // Debounced search so we don't reload on every keystroke
   useEffect(() => {
     if (search === (searchParams.get("q") ?? "")) return;
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => setParam("q", search.trim()), 400);
+    debounceRef.current = setTimeout(() => {
+      const params = new URLSearchParams(searchParams.toString());
+      const trimmed = search.trim();
+      if (trimmed) params.set("q", trimmed);
+      else params.delete("q");
+      params.delete("page");
+      router.replace(`${pathname}?${params.toString()}`);
+    }, 400);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [search, searchParams, setParam]);
-
-  const view = searchParams.get("view") ?? "list";
+  }, [search, searchParams, router, pathname]);
 
   return (
     <div className="flex flex-wrap items-center gap-2.5">
@@ -57,7 +62,7 @@ export default function BookingFilters({ studios }: { studios: Studio[] }) {
 
       <select
         value={searchParams.get("status") ?? ""}
-        onChange={(e) => setParam("status", e.target.value)}
+        onChange={(e) => setParam("status", e.target.value, true)}
         className="admin-input w-auto min-w-[10rem] cursor-pointer"
         aria-label="Filtrer par statut"
       >
@@ -71,7 +76,7 @@ export default function BookingFilters({ studios }: { studios: Studio[] }) {
 
       <select
         value={searchParams.get("studio") ?? ""}
-        onChange={(e) => setParam("studio", e.target.value)}
+        onChange={(e) => setParam("studio", e.target.value, true)}
         className="admin-input w-auto min-w-[9rem] cursor-pointer"
         aria-label="Filtrer par studio"
       >
@@ -83,58 +88,23 @@ export default function BookingFilters({ studios }: { studios: Studio[] }) {
         ))}
       </select>
 
-      {view !== "week" && (
-        <>
-          <input
-            type="date"
-            value={searchParams.get("from") ?? ""}
-            onChange={(e) => setParam("from", e.target.value)}
-            className="admin-input w-auto cursor-pointer"
-            aria-label="À partir du"
-          />
-          <span className="text-xs text-white/30" aria-hidden>
-            →
-          </span>
-          <input
-            type="date"
-            value={searchParams.get("to") ?? ""}
-            onChange={(e) => setParam("to", e.target.value)}
-            className="admin-input w-auto cursor-pointer"
-            aria-label="Jusqu'au"
-          />
-        </>
-      )}
-
-      <div
-        className="ml-auto flex rounded-xl p-1 bg-white/[0.04] border border-white/[0.08]"
-        role="group"
-        aria-label="Mode d'affichage"
-      >
-        <button
-          type="button"
-          onClick={() => setParam("view", "")}
-          className={`admin-btn min-h-9 px-3.5 rounded-lg ${
-            view !== "week"
-              ? "bg-white/10 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]"
-              : "text-white/40 hover:text-white"
-          }`}
-        >
-          <List className="w-4 h-4" aria-hidden />
-          Liste
-        </button>
-        <button
-          type="button"
-          onClick={() => setParam("view", "week")}
-          className={`admin-btn min-h-9 px-3.5 rounded-lg ${
-            view === "week"
-              ? "bg-white/10 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]"
-              : "text-white/40 hover:text-white"
-          }`}
-        >
-          <CalendarRange className="w-4 h-4" aria-hidden />
-          Semaine
-        </button>
-      </div>
+      <input
+        type="date"
+        value={searchParams.get("from") ?? ""}
+        onChange={(e) => setParam("from", e.target.value, true)}
+        className="admin-input w-auto cursor-pointer"
+        aria-label="À partir du"
+      />
+      <span className="text-xs text-white/30" aria-hidden>
+        →
+      </span>
+      <input
+        type="date"
+        value={searchParams.get("to") ?? ""}
+        onChange={(e) => setParam("to", e.target.value, true)}
+        className="admin-input w-auto cursor-pointer"
+        aria-label="Jusqu'au"
+      />
     </div>
   );
 }

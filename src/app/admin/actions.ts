@@ -24,6 +24,7 @@ import {
   fetchSettings,
   generateBookingReference,
 } from "@/lib/booking/db";
+import { normalizeGalleryUrls } from "@/lib/booking/studio-images";
 import { normalizePromoCode } from "@/lib/booking/promo";
 import {
   sendBookingCancelledEmail,
@@ -154,6 +155,130 @@ export async function cancelBooking(id: string): Promise<ActionResult> {
     );
     revalidateAdmin();
     return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Erreur" };
+  }
+}
+
+/** Confirm all pending sessions of a multi-booking package (one client email). */
+export async function confirmPackageBookings(
+  ids: string[]
+): Promise<ActionResult> {
+  try {
+    await requireAdmin();
+    if (!ids.length) return { ok: false, error: "Aucune réservation." };
+
+    const rows = await Promise.all(ids.map((id) => fetchBookingWithStudio(id)));
+    const pending = rows.filter((b) => b.status === "pending");
+    if (pending.length === 0) {
+      return {
+        ok: false,
+        error: "Aucune séance en attente dans ce forfait.",
+      };
+    }
+
+    for (const b of pending) {
+      await updateBookingStatus(b.id, "confirmed");
+    }
+
+    const settings = await fetchSettings();
+    const primary = [...pending].sort((a, b) => {
+      const ai = a.package_index ?? 999;
+      const bi = b.package_index ?? 999;
+      return ai - bi || a.date.localeCompare(b.date);
+    })[0];
+
+    const packageTotal =
+      Math.round(
+        pending.reduce((s, b) => s + Number(b.total_price_mad), 0) * 100
+      ) / 100;
+    const sessionLines = [...pending]
+      .sort(
+        (a, b) =>
+          a.date.localeCompare(b.date) || a.start_minutes - b.start_minutes
+      )
+      .map(
+        (b) =>
+          `${b.date} · ${String(Math.floor(b.start_minutes / 60)).padStart(2, "0")}:${String(b.start_minutes % 60).padStart(2, "0")} [${b.reference}]`
+      )
+      .join("\n");
+
+    const emailBooking = {
+      ...primary,
+      total_price_mad: packageTotal,
+      note: `Forfait ${pending.length} séances confirmées :\n${sessionLines}`,
+    };
+
+    const emailResult = await sendBookingConfirmedEmail({
+      booking: emailBooking,
+      studio: primary.studios,
+      settings,
+    });
+
+    revalidateAdmin();
+    if (!emailResult.ok) {
+      return {
+        ok: true,
+        warning: `${pending.length} séance(s) confirmée(s), mais l'email n'a pas pu être envoyé : ${emailResult.error}`,
+      };
+    }
+    return {
+      ok: true,
+      message: `Forfait confirmé (${pending.length} séance${pending.length > 1 ? "s" : ""}). Email envoyé à ${primary.customer_email}.`,
+    };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Erreur" };
+  }
+}
+
+/** Cancel all cancellable sessions of a package (one client email). */
+export async function cancelPackageBookings(
+  ids: string[]
+): Promise<ActionResult> {
+  try {
+    await requireAdmin();
+    if (!ids.length) return { ok: false, error: "Aucune réservation." };
+
+    const rows = await Promise.all(ids.map((id) => fetchBookingWithStudio(id)));
+    const cancellable = rows.filter((b) =>
+      ["pending", "confirmed"].includes(b.status)
+    );
+    if (cancellable.length === 0) {
+      return {
+        ok: false,
+        error: "Aucune séance annulable dans ce forfait.",
+      };
+    }
+
+    const settings = await fetchSettings();
+    const primary = cancellable[0];
+    for (const b of cancellable) {
+      await updateBookingStatus(b.id, "cancelled");
+    }
+
+    const packageTotal =
+      Math.round(
+        cancellable.reduce((s, b) => s + Number(b.total_price_mad), 0) * 100
+      ) / 100;
+    await sendBookingCancelledEmail(
+      {
+        booking: {
+          ...primary,
+          total_price_mad: packageTotal,
+          status: "cancelled",
+          note: `Forfait ${cancellable.length} séances annulé.`,
+        },
+        studio: primary.studios,
+        settings,
+      },
+      "cancelled"
+    );
+
+    revalidateAdmin();
+    return {
+      ok: true,
+      message: `Forfait annulé (${cancellable.length} séance${cancellable.length > 1 ? "s" : ""}).`,
+    };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Erreur" };
   }
@@ -324,6 +449,7 @@ export interface StudioUpdateInput {
   price_offpeak_mad: number;
   popular: boolean;
   active: boolean;
+  gallery_urls: string[];
 }
 
 export async function updateStudio(
@@ -341,6 +467,7 @@ export async function updateStudio(
     ) {
       return { ok: false, error: "Valeurs invalides." };
     }
+    const gallery = normalizeGalleryUrls(input.gallery_urls ?? []);
     const supabase = getSupabaseAdmin();
     const { error } = await supabase
       .from("studios")
@@ -353,12 +480,15 @@ export async function updateStudio(
         price_offpeak_mad: Math.round(input.price_offpeak_mad),
         popular: input.popular,
         active: input.active,
+        gallery_urls: gallery,
+        image_url: gallery[0] ?? null,
         updated_at: new Date().toISOString(),
       })
       .eq("id", id);
     if (error) throw new Error(error.message);
     revalidatePath("/admin/studios");
     revalidatePath("/reservation");
+    revalidatePath("/studios");
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Erreur" };
@@ -566,5 +696,47 @@ export async function deletePromoCode(id: number): Promise<ActionResult> {
     return { ok: true, message: "Code promo supprimé." };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Erreur" };
+  }
+}
+
+/** Fetch all bookings for one exact calendar day (CSV export). */
+export async function fetchBookingsForExportDay(
+  date: string,
+  filters?: { status?: string; studioId?: number }
+): Promise<
+  | { ok: true; bookings: (Booking & { studios: Pick<Studio, "id" | "name"> | null })[] }
+  | { ok: false; error: string }
+> {
+  try {
+    await requireAdmin();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return { ok: false, error: "Date invalide." };
+    }
+
+    const supabase = getSupabaseAdmin();
+    let query = supabase
+      .from("bookings")
+      .select("*, studios(id, name)")
+      .eq("date", date)
+      .order("start_minutes", { ascending: true })
+      .limit(500);
+
+    if (filters?.status) query = query.eq("status", filters.status);
+    if (filters?.studioId) query = query.eq("studio_id", filters.studioId);
+
+    const { data, error } = await query;
+    if (error) throw new Error(error.message);
+
+    return {
+      ok: true,
+      bookings: (data ?? []) as (Booking & {
+        studios: Pick<Studio, "id" | "name"> | null;
+      })[],
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Erreur",
+    };
   }
 }

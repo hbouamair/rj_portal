@@ -1,7 +1,6 @@
 "use client";
 
 import type { ReactNode } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import {
@@ -16,6 +15,8 @@ import {
 } from "lucide-react";
 import type { PeakWindow, Settings, Studio } from "@/lib/booking/types";
 import { formatMad } from "@/lib/booking/pricing";
+import { getStudioImages } from "@/lib/booking/studio-images";
+import StudioImageCarousel from "@/components/studios/StudioImageCarousel";
 import { BOOKING_URL } from "@/lib/constants";
 
 const DAY_LABELS = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
@@ -289,19 +290,15 @@ function StudioCard({
         className={`grid md:grid-cols-2 ${imageFirst ? "" : "md:[direction:rtl]"}`}
       >
         <div className="relative h-56 sm:h-64 md:h-auto md:min-h-[280px] md:[direction:ltr] overflow-hidden">
-          {studio.image_url ? (
-            <Image
-              src={studio.image_url}
-              alt={studio.name}
-              fill
-              sizes="(max-width: 768px) 100vw, 50vw"
-              className="object-cover transition-transform duration-300 ease-out group-hover:scale-105"
-              priority={index === 0}
-            />
-          ) : (
-            <div className="absolute inset-0 bg-gradient-to-br from-primary-400 to-secondary-500" />
-          )}
-          <div className="absolute inset-0 bg-gradient-to-t from-charcoal/50 via-transparent to-transparent md:bg-gradient-to-r md:from-charcoal/40 md:via-transparent" />
+          <StudioImageCarousel
+            images={getStudioImages(studio)}
+            alt={studio.name}
+            className="absolute inset-0 h-full w-full rounded-none"
+            aspectClassName="h-full min-h-[280px]"
+            priority={index === 0}
+            rounded={false}
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-charcoal/50 via-transparent to-transparent md:bg-gradient-to-r md:from-charcoal/40 md:via-transparent pointer-events-none" />
           {studio.popular && (
             <span className="absolute top-4 left-4 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-accent-500 text-white text-[10px] font-bold uppercase tracking-wide shadow-md">
               <Sparkles className="w-3 h-3" aria-hidden />

@@ -33,7 +33,6 @@ export default function WeekCalendar({
   const navigateWeek = useCallback(
     (offsetDays: number) => {
       const params = new URLSearchParams(searchParams.toString());
-      params.set("view", "week");
       params.set("week", format(addDays(start, offsetDays), "yyyy-MM-dd"));
       router.replace(`${pathname}?${params.toString()}`);
     },

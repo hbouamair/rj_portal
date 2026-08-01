@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  BarChart3,
   CalendarDays,
   LogOut,
   Menu,
@@ -15,7 +16,8 @@ import {
 } from "lucide-react";
 
 const LINKS = [
-  { href: "/admin", label: "Réservations", icon: CalendarDays, hint: "Agenda & paiements" },
+  { href: "/admin", label: "Réservations", icon: CalendarDays, hint: "Calendrier & liste" },
+  { href: "/admin/statistiques", label: "Statistiques", icon: BarChart3, hint: "Taux & occupation" },
   { href: "/admin/studios", label: "Studios", icon: Music, hint: "Tarifs & salles" },
   { href: "/admin/promo-codes", label: "Codes promo", icon: Tag, hint: "Réductions clients" },
   { href: "/admin/income", label: "Revenus", icon: TrendingUp, hint: "Chiffre d'affaires" },

@@ -10,6 +10,7 @@ import {
   updatePromoCode,
   type PromoCodeInput,
 } from "@/app/admin/actions";
+import { useAdminFeedback } from "@/components/admin/AdminFeedback";
 
 function toDatetimeLocal(iso: string | null): string {
   if (!iso) return "";
@@ -54,6 +55,7 @@ function PromoCodeForm({
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const { confirm, toast } = useAdminFeedback();
 
   const inputClass = "admin-input";
   const labelClass =
@@ -82,9 +84,14 @@ function PromoCodeForm({
         : await createPromoCode(buildInput());
       if (!result.ok) {
         setError(result.error ?? "Erreur");
+        toast.error("Échec", result.error ?? "Impossible d'enregistrer.");
         return;
       }
       setSaved(true);
+      toast.success(
+        promoId ? "Code mis à jour" : "Code créé",
+        code.trim().toUpperCase()
+      );
       if (!promoId) {
         setCode("");
         setLabel("");
@@ -99,15 +106,23 @@ function PromoCodeForm({
     });
   }
 
-  function remove() {
+  async function remove() {
     if (!promoId) return;
-    if (!window.confirm(`Supprimer le code ${code} ?`)) return;
+    const ok = await confirm({
+      title: "Supprimer ce code promo ?",
+      description: `Le code ${code} sera définitivement supprimé.`,
+      confirmLabel: "Supprimer",
+      tone: "danger",
+    });
+    if (!ok) return;
     startTransition(async () => {
       const result = await deletePromoCode(promoId);
       if (!result.ok) {
         setError(result.error ?? "Erreur");
+        toast.error("Échec", result.error ?? "Suppression impossible.");
         return;
       }
+      toast.success("Code promo supprimé", code);
       onDeleted?.();
     });
   }
