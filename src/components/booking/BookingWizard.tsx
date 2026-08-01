@@ -1257,6 +1257,43 @@ function SessionCountStep({
   onBack: () => void;
 }) {
   const [localMode, setLocalMode] = useState<SessionMode | null>(mode);
+  // Draft string so mobile users can type "10" without being clamped to 2 on the first digit.
+  const [countDraft, setCountDraft] = useState(String(multiCount));
+  const [countError, setCountError] = useState<string | null>(null);
+
+  function clampMultiCount(n: number) {
+    return Math.min(
+      MAX_MULTI_SESSIONS,
+      Math.max(MIN_MULTI_SESSIONS, Math.round(n))
+    );
+  }
+
+  function commitCountDraft(raw: string): number | null {
+    const trimmed = raw.trim();
+    if (trimmed === "") {
+      setCountError(
+        `Indiquez un nombre entre ${MIN_MULTI_SESSIONS} et ${MAX_MULTI_SESSIONS}.`
+      );
+      return null;
+    }
+    const n = Number(trimmed);
+    if (!Number.isFinite(n)) {
+      setCountError("Nombre invalide.");
+      return null;
+    }
+    const clamped = clampMultiCount(n);
+    setCountDraft(String(clamped));
+    setCountError(null);
+    onMultiCountChange(clamped);
+    return clamped;
+  }
+
+  const previewCount = (() => {
+    const n = Number(countDraft);
+    return Number.isFinite(n) && n >= MIN_MULTI_SESSIONS
+      ? clampMultiCount(n)
+      : multiCount;
+  })();
 
   return (
     <div className="space-y-5 max-w-3xl mx-auto">
@@ -1338,41 +1375,88 @@ function SessionCountStep({
           className="book-card p-5 sm:p-6 space-y-4 border-secondary-100/80"
         >
           <Field label="Nombre de séances à réserver">
-            <input
-              type="number"
-              min={MIN_MULTI_SESSIONS}
-              max={MAX_MULTI_SESSIONS}
-              value={multiCount}
-              onChange={(e) => {
-                const n = Number(e.target.value);
-                if (!Number.isFinite(n)) return;
-                onMultiCountChange(
-                  Math.min(
-                    MAX_MULTI_SESSIONS,
-                    Math.max(MIN_MULTI_SESSIONS, Math.round(n))
-                  )
-                );
-              }}
-              className="book-input min-h-12 max-w-[10rem]"
-            />
+            <div className="flex items-center gap-2 max-w-xs">
+              <button
+                type="button"
+                aria-label="Diminuer"
+                disabled={previewCount <= MIN_MULTI_SESSIONS}
+                onClick={() => {
+                  const next = clampMultiCount(previewCount - 1);
+                  setCountDraft(String(next));
+                  setCountError(null);
+                  onMultiCountChange(next);
+                }}
+                className="book-btn-ghost min-h-12 min-w-12 px-0 justify-center disabled:opacity-40"
+              >
+                −
+              </button>
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                autoComplete="off"
+                value={countDraft}
+                onChange={(e) => {
+                  const raw = e.target.value.replace(/[^\d]/g, "");
+                  setCountDraft(raw);
+                  setCountError(null);
+                  const n = Number(raw);
+                  if (
+                    Number.isFinite(n) &&
+                    n >= MIN_MULTI_SESSIONS &&
+                    n <= MAX_MULTI_SESSIONS
+                  ) {
+                    onMultiCountChange(n);
+                  }
+                }}
+                onBlur={() => {
+                  commitCountDraft(countDraft);
+                }}
+                className="book-input min-h-12 text-center text-lg font-semibold tabular-nums"
+              />
+              <button
+                type="button"
+                aria-label="Augmenter"
+                disabled={previewCount >= MAX_MULTI_SESSIONS}
+                onClick={() => {
+                  const next = clampMultiCount(previewCount + 1);
+                  setCountDraft(String(next));
+                  setCountError(null);
+                  onMultiCountChange(next);
+                }}
+                className="book-btn-ghost min-h-12 min-w-12 px-0 justify-center disabled:opacity-40"
+              >
+                +
+              </button>
+            </div>
           </Field>
+          {countError && (
+            <p className="text-xs font-medium text-rose-600">{countError}</p>
+          )}
           <p className="text-xs text-soft-charcoal">
-            Exemple : {REGULAR_COURSE_MIN_COUNT} cours → vous payez{" "}
+            Entre {MIN_MULTI_SESSIONS} et {MAX_MULTI_SESSIONS} séances. Exemple :{" "}
+            {REGULAR_COURSE_MIN_COUNT} cours → vous payez{" "}
             {REGULAR_COURSE_MIN_COUNT - 1}, le {REGULAR_COURSE_MIN_COUNT}
             <sup>e</sup> est offert (les séances les moins chères).
           </p>
-          {multiCount >= REGULAR_COURSE_MIN_COUNT && (
+          {previewCount >= REGULAR_COURSE_MIN_COUNT && (
             <p className="text-sm font-medium text-secondary-700 bg-secondary-50 border border-secondary-100 rounded-xl px-3 py-2">
-              Forfait {multiCount} séances ·{" "}
-              {Math.floor(multiCount / REGULAR_COURSE_MIN_COUNT)} offerte
-              {Math.floor(multiCount / REGULAR_COURSE_MIN_COUNT) > 1 ? "s" : ""}{" "}
-              · vous payez {getPaidCoursesForPackage(multiCount)}
+              Forfait {previewCount} séances ·{" "}
+              {Math.floor(previewCount / REGULAR_COURSE_MIN_COUNT)} offerte
+              {Math.floor(previewCount / REGULAR_COURSE_MIN_COUNT) > 1
+                ? "s"
+                : ""}{" "}
+              · vous payez {getPaidCoursesForPackage(previewCount)}
             </p>
           )}
           <div className="flex justify-end pt-1">
             <button
               type="button"
-              onClick={() => onSelect("multi")}
+              onClick={() => {
+                const committed = commitCountDraft(countDraft);
+                if (committed == null) return;
+                onSelect("multi");
+              }}
               className="book-btn-primary min-h-12"
             >
               Continuer
