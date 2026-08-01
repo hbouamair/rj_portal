@@ -360,7 +360,7 @@ export async function POST(request: NextRequest) {
     const regularDiscountMad = isPackage
       ? multiPricing!.regularCourseDiscountMad
       : 0;
-    let subtotalMad = isPackage
+    const subtotalMad = isPackage
       ? multiPricing!.totalBeforePromoMad
       : singlePricing!.totalBeforePromoMad;
 
@@ -470,7 +470,10 @@ export async function POST(request: NextRequest) {
             error.message?.includes("package_group_id") ||
             error.message?.includes("package_index"))
         ) {
-          const { package_group_id: _g, package_index: _i, ...legacyRow } = row;
+          const legacyRow = { ...row };
+          delete (legacyRow as { package_group_id?: string | null })
+            .package_group_id;
+          delete (legacyRow as { package_index?: number | null }).package_index;
           ({ data, error } = await supabase
             .from("bookings")
             .insert(legacyRow)

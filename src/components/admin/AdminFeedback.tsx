@@ -92,9 +92,10 @@ export function AdminFeedbackProvider({
   );
 
   useEffect(() => {
+    const activeTimers = timers.current;
     return () => {
-      timers.current.forEach((t) => clearTimeout(t));
-      timers.current.clear();
+      activeTimers.forEach((t) => clearTimeout(t));
+      activeTimers.clear();
     };
   }, []);
 
