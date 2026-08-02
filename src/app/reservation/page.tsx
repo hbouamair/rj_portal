@@ -44,20 +44,14 @@ export default async function ReservationPage() {
         />
 
         <div className="container relative mx-auto px-4 sm:px-6 lg:px-8">
-          <header className="max-w-2xl mx-auto text-center mb-10 md:mb-14">
-            <p className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/80 border border-charcoal/5 text-[11px] font-bold uppercase tracking-[0.16em] text-soft-charcoal mb-5 shadow-sm">
-              Réservation en ligne
-            </p>
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-display font-bold text-charcoal tracking-tight mb-4">
+          <header className="max-w-2xl mx-auto text-center mb-8 md:mb-10">
+            <p className="book-kicker mb-5">Réservation en ligne</p>
+            <h1 className="text-4xl md:text-5xl lg:text-[3.25rem] font-display font-bold text-charcoal tracking-tight mb-4 leading-[1.08]">
               Réservez votre{" "}
-              <span className="bg-gradient-to-r from-primary-500 to-secondary-500 bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-primary-500 via-primary-600 to-secondary-500 bg-clip-text text-transparent">
                 studio
               </span>
             </h1>
-            <p className="text-base md:text-lg text-soft-charcoal leading-relaxed">
-              Choisissez le studio, la date et la durée — le prix se calcule
-              automatiquement selon les heures pleines et creuses.
-            </p>
           </header>
 
           {error || !settings ? (

@@ -130,9 +130,9 @@ export function computeBookingPriceWithDiscounts(options: {
   };
 }
 
-/** Short label for the forfait offer (UI). */
+/** Short label for the pack-10 offer (UI). */
 export function regularCourseOfferLabel(): string {
-  return `À partir de ${REGULAR_COURSE_MIN_COUNT} cours, 1 séance est offerte (par tranche de ${REGULAR_COURSE_MIN_COUNT}).`;
+  return `Pack ${REGULAR_COURSE_MIN_COUNT} : payez ${REGULAR_COURSE_MIN_COUNT - 1}, la ${REGULAR_COURSE_MIN_COUNT}e séance est offerte (~10 % de remise).`;
 }
 
 /** One-line package summary for receipts and confirmation. */

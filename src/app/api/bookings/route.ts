@@ -6,6 +6,7 @@ import {
   computeBookingPriceWithDiscounts,
   computeMultiSlotPackagePrice,
   isPrivateStudio,
+  REGULAR_COURSE_MIN_COUNT,
 } from "@/lib/booking/discounts";
 import {
   MAX_DURATION_MINUTES,
@@ -105,8 +106,11 @@ function validate(
 
   let slots: SlotInput[] = [];
   if (Array.isArray(b.slots) && b.slots.length > 0) {
-    if (b.slots.length > 52) {
-      return { ok: false, error: "Maximum 52 séances par réservation." };
+    if (b.slots.length > 1 && b.slots.length !== REGULAR_COURSE_MIN_COUNT) {
+      return {
+        ok: false,
+        error: `Le pack comporte exactement ${REGULAR_COURSE_MIN_COUNT} séances.`,
+      };
     }
     for (const slot of b.slots) {
       if (!isValidSlot(slot)) {

@@ -86,7 +86,7 @@ export default function BookingsTable({
 
   return (
     <div className="admin-card overflow-hidden">
-      <div className="overflow-x-auto">
+      <div className="admin-scroll-area overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-white/[0.03] border-b border-white/[0.07] text-left text-[11px] font-bold uppercase tracking-[0.08em] text-white/40">
@@ -288,7 +288,7 @@ function PackageRow({ bookings }: { bookings: BookingWithStudio[] }) {
             <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-white/35 mb-3">
               Séances du forfait
             </p>
-            <div className="overflow-x-auto rounded-xl border border-white/[0.06]">
+            <div className="admin-scroll-area overflow-x-auto rounded-xl border border-white/[0.06]">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="text-left text-white/35 border-b border-white/[0.06]">

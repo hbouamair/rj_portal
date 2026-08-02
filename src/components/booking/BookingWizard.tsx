@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   addMonths,
@@ -64,7 +65,7 @@ interface Props {
   settings: Settings;
 }
 
-type SessionMode = "single" | "multi";
+type SessionMode = "single" | "pack10";
 
 interface BookingResult {
   reference: string;
@@ -92,27 +93,38 @@ interface AppliedPromo {
 
 const STEPS = [
   "Type de cours",
-  "Séances",
+  "Formule",
   "Studio",
   "Créneaux",
   "Coordonnées",
   "Confirmé",
 ];
-const MIN_MULTI_SESSIONS = 2;
-const MAX_MULTI_SESSIONS = 52;
+const PACK_SESSION_COUNT = REGULAR_COURSE_MIN_COUNT;
 
 const stepMotion = {
-  initial: { opacity: 0, y: 18 },
-  animate: { opacity: 1, y: 0 },
-  exit: { opacity: 0, y: -12 },
+  initial: { opacity: 0, y: 18, scale: 0.985 },
+  animate: { opacity: 1, y: 0, scale: 1 },
+  exit: { opacity: 0, y: -12, scale: 0.985 },
   transition: { duration: 0.32, ease: [0.22, 1, 0.36, 1] as const },
+};
+
+const staggerContainer = {
+  animate: { transition: { staggerChildren: 0.07, delayChildren: 0.04 } },
+};
+
+const staggerItem = {
+  initial: { opacity: 0, y: 18 },
+  animate: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.38, ease: [0.22, 1, 0.36, 1] as const },
+  },
 };
 
 export default function BookingWizard({ studios, settings }: Props) {
   const [step, setStep] = useState(0);
   const [courseType, setCourseType] = useState<CourseType | null>(null);
   const [sessionMode, setSessionMode] = useState<SessionMode | null>(null);
-  const [multiCount, setMultiCount] = useState(MIN_MULTI_SESSIONS);
   const [studio, setStudio] = useState<Studio | null>(null);
 
   const [month, setMonth] = useState(() => startOfMonth(new Date()));
@@ -138,8 +150,9 @@ export default function BookingWizard({ studios, settings }: Props) {
   const wizardRef = useRef<HTMLDivElement>(null);
   const skipInitialScroll = useRef(true);
 
-  const targetSlotCount = sessionMode === "multi" ? multiCount : 1;
-  const isMulti = sessionMode === "multi";
+  const targetSlotCount =
+    sessionMode === "pack10" ? PACK_SESSION_COUNT : 1;
+  const isPack10 = sessionMode === "pack10";
 
   useEffect(() => {
     if (skipInitialScroll.current) {
@@ -258,7 +271,7 @@ export default function BookingWizard({ studios, settings }: Props) {
 
   const singlePriceBreakdown = useMemo(() => {
     if (
-      isMulti ||
+      isPack10 ||
       !studio ||
       !courseType ||
       !selectedDate ||
@@ -276,7 +289,7 @@ export default function BookingWizard({ studios, settings }: Props) {
       regularCourseCount: 1,
     });
   }, [
-    isMulti,
+    isPack10,
     studio,
     courseType,
     selectedDate,
@@ -286,7 +299,7 @@ export default function BookingWizard({ studios, settings }: Props) {
   ]);
 
   const multiPriceBreakdown: MultiSlotPackageBreakdown | null = useMemo(() => {
-    if (!isMulti || !studio || !courseType || confirmedSlots.length === 0)
+    if (!isPack10 || !studio || !courseType || confirmedSlots.length === 0)
       return null;
     return computeMultiSlotPackagePrice({
       studio,
@@ -296,7 +309,7 @@ export default function BookingWizard({ studios, settings }: Props) {
       peakWindows: settings.peak_windows,
     });
   }, [
-    isMulti,
+    isPack10,
     studio,
     courseType,
     confirmedSlots,
@@ -305,11 +318,11 @@ export default function BookingWizard({ studios, settings }: Props) {
   ]);
 
   const packageReady =
-    !isMulti
+    !isPack10
       ? singlePriceBreakdown != null
       : confirmedSlots.length === targetSlotCount && multiPriceBreakdown != null;
 
-  const totalBeforePromoMad = isMulti
+  const totalBeforePromoMad = isPack10
     ? multiPriceBreakdown?.totalBeforePromoMad ?? null
     : singlePriceBreakdown?.totalBeforePromoMad ?? null;
 
@@ -326,7 +339,7 @@ export default function BookingWizard({ studios, settings }: Props) {
   function handleDurationChange(next: number) {
     setDuration(next);
     setStartMinutes(null);
-    if (isMulti) {
+    if (isPack10) {
       setConfirmedSlots([]);
       setAppliedPromo(null);
     }
@@ -334,7 +347,7 @@ export default function BookingWizard({ studios, settings }: Props) {
 
   function selectStartTime(m: number) {
     if (!selectedDate) return;
-    if (!isMulti) {
+    if (!isPack10) {
       setStartMinutes(m);
       return;
     }
@@ -393,7 +406,7 @@ export default function BookingWizard({ studios, settings }: Props) {
   async function submitBooking() {
     if (!studio || !courseType || !packageReady) return;
 
-    const slots: BookingSlotInput[] = isMulti
+    const slots: BookingSlotInput[] = isPack10
       ? confirmedSlots
       : selectedDate && startMinutes !== null
         ? [{ date: selectedDate, startMinutes }]
@@ -440,7 +453,7 @@ export default function BookingWizard({ studios, settings }: Props) {
     }
   }
 
-  const scheduleComplete = isMulti
+  const scheduleComplete = isPack10
     ? confirmedSlots.length === targetSlotCount
     : selectedDate != null && startMinutes !== null;
 
@@ -450,33 +463,34 @@ export default function BookingWizard({ studios, settings }: Props) {
     phone.trim().length >= 8;
 
   return (
-    <div ref={wizardRef} className="max-w-5xl mx-auto scroll-mt-28">
-      <StepIndicator current={step} />
+    <div ref={wizardRef} className="book-frame max-w-5xl mx-auto scroll-mt-28">
+      <div className="book-frame-inner">
+        <StepIndicator current={step} />
 
-      <AnimatePresence mode="wait">
-        <motion.div key={step} {...stepMotion}>
+        <AnimatePresence mode="wait">
+          <motion.div key={step} {...stepMotion}>
           {step === 0 && (
-            <CourseTypeStep
-              selected={courseType}
-              onSelect={(type) => {
-                setCourseType(type);
-                setStudio(null);
-                setSessionMode(null);
-                resetSchedule();
-                setStep(1);
-              }}
-            />
+            <>
+              <BookStepHeader
+                title="Quel type de cours ?"
+                description="Groupe ou privé — les studios et tarifs s'adaptent à votre choix."
+              />
+              <CourseTypeStep
+                selected={courseType}
+                onSelect={(type) => {
+                  setCourseType(type);
+                  setStudio(null);
+                  setSessionMode(null);
+                  resetSchedule();
+                  setStep(1);
+                }}
+              />
+            </>
           )}
 
           {step === 1 && courseType && (
             <SessionCountStep
               mode={sessionMode}
-              multiCount={multiCount}
-              onMultiCountChange={(n) => {
-                setMultiCount(n);
-                setConfirmedSlots([]);
-                setAppliedPromo(null);
-              }}
               onSelect={(mode) => {
                 setSessionMode(mode);
                 resetSchedule();
@@ -497,24 +511,24 @@ export default function BookingWizard({ studios, settings }: Props) {
                 setStep(3);
               }}
               onBack={() => setStep(1)}
-              backLabel="Nombre de séances"
+              backLabel="Formule"
             />
           )}
 
           {step === 3 && studio && courseType && sessionMode && (
             <div className="space-y-5">
-              <div className="flex flex-wrap items-center gap-3 mb-1">
-                <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-charcoal/5 text-xs font-semibold text-charcoal shadow-sm">
+              <div className="flex flex-wrap items-center gap-2.5 mb-2">
+                <span className="book-badge">
                   <Users className="w-3.5 h-3.5 text-secondary-500" aria-hidden />
                   {courseType === "private" ? "Cours privé" : "Cours en groupe"}
                 </span>
-                <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-charcoal/5 text-xs font-semibold text-charcoal shadow-sm">
+                <span className="book-badge">
                   <Music className="w-3.5 h-3.5 text-primary-500" aria-hidden />
                   {studio.name}
                 </span>
-                <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-charcoal/5 text-xs font-semibold text-charcoal shadow-sm">
+                <span className="book-badge">
                   <Calendar className="w-3.5 h-3.5 text-secondary-500" aria-hidden />
-                  {isMulti ? `${targetSlotCount} séances` : "1 séance"}
+                  {isPack10 ? `Pack ${PACK_SESSION_COUNT} séances` : "1 séance"}
                 </span>
                 <button
                   type="button"
@@ -525,9 +539,9 @@ export default function BookingWizard({ studios, settings }: Props) {
                 </button>
               </div>
 
-              {isMulti && (
-                <div className="book-card px-4 py-3 sm:px-5 border-secondary-100/80">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              {isPack10 && (
+                <div className="book-panel-accent px-4 py-4 sm:px-5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="font-display font-bold text-charcoal text-sm sm:text-base">
                         Sélectionnez {targetSlotCount} créneaux
@@ -535,16 +549,13 @@ export default function BookingWizard({ studios, settings }: Props) {
                           {confirmedSlots.length}/{targetSlotCount}
                         </span>
                       </p>
-                      <p className="text-xs text-soft-charcoal mt-0.5 truncate">
+                      <p className="text-xs text-soft-charcoal mt-1">
                         {regularCourseOfferLabel()}
                       </p>
                     </div>
-                    <div
-                      className="h-1.5 w-full sm:w-40 sm:flex-none rounded-full bg-charcoal/5 overflow-hidden"
-                      aria-hidden
-                    >
+                    <div className="book-progress-track w-full sm:w-44 sm:flex-none h-2">
                       <div
-                        className="h-full rounded-full bg-gradient-to-r from-primary-500 to-secondary-500 transition-all duration-300"
+                        className="book-progress-fill h-full transition-all duration-300"
                         style={{
                           width: `${Math.min(
                             100,
@@ -559,24 +570,24 @@ export default function BookingWizard({ studios, settings }: Props) {
 
               <div
                 className={
-                  isMulti
+                  isPack10
                     ? "grid grid-cols-1 lg:grid-cols-3 gap-5 items-start"
                     : "grid grid-cols-1 lg:grid-cols-2 gap-5"
                 }
               >
                 <div
                   className={
-                    isMulti
+                    isPack10
                       ? "lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-5"
                       : "contents"
                   }
                 >
                 <div className="book-card p-5 sm:p-6">
-                  <h3 className="flex items-center gap-2.5 font-display font-bold text-charcoal mb-5">
-                    <span className="w-9 h-9 rounded-xl bg-primary-50 text-primary-600 flex items-center justify-center">
+                  <h3 className="book-section-head">
+                    <span className="book-section-icon text-primary-600">
                       <Calendar className="w-4 h-4" aria-hidden />
                     </span>
-                    {isMulti && confirmedSlots.length < targetSlotCount
+                    {isPack10 && confirmedSlots.length < targetSlotCount
                       ? `Date — séance ${confirmedSlots.length + 1}`
                       : "Date"}
                   </h3>
@@ -594,8 +605,8 @@ export default function BookingWizard({ studios, settings }: Props) {
                 </div>
 
                 <div className="book-card p-5 sm:p-6 flex flex-col">
-                  <h3 className="flex items-center gap-2.5 font-display font-bold text-charcoal mb-5">
-                    <span className="w-9 h-9 rounded-xl bg-secondary-50 text-secondary-600 flex items-center justify-center">
+                  <h3 className="book-section-head">
+                    <span className="book-section-icon text-secondary-600">
                       <Clock className="w-4 h-4" aria-hidden />
                     </span>
                     Durée & horaire
@@ -603,7 +614,7 @@ export default function BookingWizard({ studios, settings }: Props) {
 
                   <p className="text-xs font-semibold uppercase tracking-wider text-soft-charcoal mb-2.5">
                     Durée · min. 1h
-                    {isMulti && (
+                    {isPack10 && (
                       <span className="normal-case font-medium tracking-normal ml-1">
                         (identique pour toutes les séances)
                       </span>
@@ -652,7 +663,7 @@ export default function BookingWizard({ studios, settings }: Props) {
 
                   <p className="text-xs font-semibold uppercase tracking-wider text-soft-charcoal mb-1.5">
                     Heure de début
-                    {isMulti && confirmedSlots.length < targetSlotCount && (
+                    {isPack10 && confirmedSlots.length < targetSlotCount && (
                       <span className="normal-case font-medium tracking-normal ml-1 text-primary-600">
                         — cliquez pour ajouter
                       </span>
@@ -684,7 +695,7 @@ export default function BookingWizard({ studios, settings }: Props) {
                       </span>
                     )}
                   </div>
-                  {isMulti && confirmedSlots.length >= targetSlotCount ? (
+                  {isPack10 && confirmedSlots.length >= targetSlotCount ? (
                     <p className="text-sm text-secondary-700 bg-secondary-50 border border-secondary-100 rounded-2xl px-4 py-4">
                       Les {targetSlotCount} créneaux sont sélectionnés. Vous
                       pouvez en retirer un ci-dessus pour le remplacer.
@@ -714,7 +725,7 @@ export default function BookingWizard({ studios, settings }: Props) {
                               ? "heures creuses"
                               : "tarif mixte";
                         const active =
-                          !isMulti && startMinutes === m;
+                          !isPack10 && startMinutes === m;
                         return (
                           <button
                             key={m}
@@ -752,13 +763,13 @@ export default function BookingWizard({ studios, settings }: Props) {
                 </div>
                 </div>
 
-                {isMulti && (
-                  <aside className="book-card p-4 sm:p-5 border-secondary-100/80 lg:sticky lg:top-28 flex flex-col min-h-0 max-h-[22rem] lg:max-h-[min(36rem,calc(100vh-9rem))]">
-                    <div className="shrink-0 mb-3">
+                {isPack10 && (
+                  <aside className="book-card p-4 sm:p-5 border-secondary-100/80 lg:sticky lg:top-28 flex flex-col min-h-0 order-last lg:order-none max-h-[min(32rem,calc(100vh-7rem))] lg:max-h-[min(40rem,calc(100vh-9rem))]">
+                    <div className="shrink-0 mb-4">
                       <h3 className="font-display font-bold text-charcoal text-sm">
                         Séances sélectionnées
                       </h3>
-                      <p className="text-xs text-soft-charcoal mt-0.5">
+                      <p className="text-xs text-soft-charcoal mt-1">
                         {confirmedSlots.length === 0
                           ? "Choisissez une date puis une heure."
                           : `${confirmedSlots.length} sur ${targetSlotCount}`}
@@ -766,55 +777,69 @@ export default function BookingWizard({ studios, settings }: Props) {
                     </div>
 
                     {confirmedSlots.length === 0 ? (
-                      <div className="flex-1 flex items-center justify-center rounded-xl border border-dashed border-charcoal/10 bg-charcoal/[0.02] px-3 py-6">
+                      <div className="flex-1 flex items-center justify-center rounded-xl border border-dashed border-charcoal/10 bg-charcoal/[0.02] px-4 py-8">
                         <p className="text-xs text-soft-charcoal text-center leading-relaxed">
                           Aucun créneau pour l&apos;instant.
                         </p>
                       </div>
                     ) : (
-                      <ul className="flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-1.5 pr-1 -mr-0.5">
+                      <ul className="flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-2.5 pr-0.5">
                         {confirmedSlots.map((slot, index) => {
                           const quote = multiPriceBreakdown?.slots[index];
                           const showFree =
                             confirmedSlots.length === targetSlotCount &&
                             quote?.isFree;
+                          const slotLabel = formatSelectedSlotLabel(
+                            slot,
+                            duration,
+                            { compact: true }
+                          );
                           return (
-                            <li
+                            <motion.li
+                              layout
+                              initial={{ opacity: 0, scale: 0.96 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              exit={{ opacity: 0, scale: 0.96 }}
+                              transition={{ duration: 0.25 }}
                               key={`${slot.date}-${slot.startMinutes}`}
-                              className="flex items-center justify-between gap-2 rounded-lg bg-charcoal/[0.02] border border-charcoal/5 px-2.5 py-1.5 text-xs"
+                              className="book-slot-item"
                             >
-                              <span className="text-charcoal capitalize min-w-0 leading-snug">
-                                <span className="font-semibold text-soft-charcoal mr-1.5">
-                                  {index + 1}.
+                              <div className="flex items-start gap-3">
+                                <span className="book-slot-index" aria-hidden>
+                                  {index + 1}
                                 </span>
-                                {format(parseDateString(slot.date), "EEE d MMM", {
-                                  locale: fr,
-                                })}{" "}
-                                · {minutesToTimeString(slot.startMinutes)}
-                                {showFree && (
-                                  <span className="ml-1.5 text-[10px] font-bold text-secondary-600">
-                                    Offerte
-                                  </span>
-                                )}
-                              </span>
-                              <span className="flex items-center gap-1 shrink-0">
-                                {quote && (
-                                  <span className="font-semibold tabular-nums text-charcoal">
-                                    {showFree
-                                      ? formatMad(0)
-                                      : formatMad(quote.sessionPriceMad)}
-                                  </span>
-                                )}
-                                <button
-                                  type="button"
-                                  onClick={() => removeConfirmedSlot(index)}
-                                  className="min-w-8 min-h-8 inline-flex items-center justify-center rounded-lg text-soft-charcoal hover:text-accent-600 hover:bg-accent-50 transition-colors cursor-pointer"
-                                  aria-label={`Retirer la séance ${index + 1}`}
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </span>
-                            </li>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-medium text-charcoal leading-snug capitalize">
+                                    {slotLabel.dateLabel}
+                                  </p>
+                                  <p className="text-xs text-soft-charcoal tabular-nums mt-1">
+                                    {slotLabel.timeLabel}
+                                  </p>
+                                  {showFree && (
+                                    <span className="inline-block mt-1.5 text-[10px] font-bold uppercase tracking-wide text-secondary-600">
+                                      Offerte
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex flex-col items-end gap-1.5 shrink-0">
+                                  {quote && (
+                                    <span className="text-xs font-semibold tabular-nums text-charcoal whitespace-nowrap">
+                                      {showFree
+                                        ? formatMad(0)
+                                        : formatMad(quote.sessionPriceMad)}
+                                    </span>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => removeConfirmedSlot(index)}
+                                    className="min-w-8 min-h-8 inline-flex items-center justify-center rounded-lg text-soft-charcoal hover:text-accent-600 hover:bg-accent-50 transition-colors cursor-pointer"
+                                    aria-label={`Retirer la séance ${index + 1}`}
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            </motion.li>
                           );
                         })}
                       </ul>
@@ -822,7 +847,7 @@ export default function BookingWizard({ studios, settings }: Props) {
 
                     {multiPriceBreakdown &&
                       confirmedSlots.length === targetSlotCount && (
-                        <div className="shrink-0 mt-3 pt-3 border-t border-charcoal/5">
+                        <div className="shrink-0 mt-4 pt-4 border-t border-charcoal/5">
                           <MultiPackageBreakdown
                             breakdown={multiPriceBreakdown}
                           />
@@ -832,7 +857,7 @@ export default function BookingWizard({ studios, settings }: Props) {
                 )}
               </div>
 
-              {!isMulti &&
+              {!isPack10 &&
                 singlePriceBreakdown &&
                 selectedDate &&
                 startMinutes !== null &&
@@ -840,7 +865,7 @@ export default function BookingWizard({ studios, settings }: Props) {
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="book-card p-5 sm:px-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-primary-100"
+                    className="book-price-hero"
                   >
                     <div>
                       <p className="text-sm font-medium text-charcoal capitalize">
@@ -888,15 +913,10 @@ export default function BookingWizard({ studios, settings }: Props) {
             scheduleComplete && (
               <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
                 <div className="lg:col-span-3 book-card p-5 sm:p-7 space-y-5">
-                  <div>
-                    <h3 className="font-display font-bold text-xl text-charcoal tracking-tight">
-                      Vos coordonnées
-                    </h3>
-                    <p className="text-sm text-soft-charcoal mt-1">
-                      Nous vous enverrons la confirmation et les instructions
-                      de paiement.
-                    </p>
-                  </div>
+                  <BookStepHeader
+                    title="Vos coordonnées"
+                    description="Nous vous enverrons la confirmation et les instructions de paiement."
+                  />
 
                   <Field label="Nom complet *">
                     <input
@@ -1078,7 +1098,7 @@ export default function BookingWizard({ studios, settings }: Props) {
                 </div>
 
                 <aside className="lg:col-span-2">
-                  <div className="book-card p-5 sm:p-6 lg:sticky lg:top-28 space-y-4">
+                  <div className="book-summary lg:col-span-2">
                     <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-soft-charcoal">
                       Récapitulatif
                     </p>
@@ -1092,14 +1112,14 @@ export default function BookingWizard({ studios, settings }: Props) {
                     />
                     <SummaryRow label="Studio" value={studio.name} />
                     <SummaryRow
-                      label="Séances"
+                      label="Formule"
                       value={
-                        isMulti
-                          ? `${confirmedSlots.length} créneaux`
+                        isPack10
+                          ? `Pack ${PACK_SESSION_COUNT} séances`
                           : "1 séance"
                       }
                     />
-                    {!isMulti && selectedDate && startMinutes !== null && (
+                    {!isPack10 && selectedDate && startMinutes !== null && (
                       <>
                         <SummaryRow
                           label="Date"
@@ -1115,14 +1135,20 @@ export default function BookingWizard({ studios, settings }: Props) {
                         />
                       </>
                     )}
-                    {isMulti &&
-                      confirmedSlots.map((slot, i) => (
-                        <SummaryRow
-                          key={`${slot.date}-${slot.startMinutes}`}
-                          label={`Séance ${i + 1}`}
-                          value={`${format(parseDateString(slot.date), "EEE d MMM", { locale: fr })} · ${minutesToTimeString(slot.startMinutes)}`}
-                        />
-                      ))}
+                    {isPack10 &&
+                      confirmedSlots.map((slot, i) => {
+                        const slotLabel = formatSelectedSlotLabel(
+                          slot,
+                          duration
+                        );
+                        return (
+                          <SummaryRow
+                            key={`${slot.date}-${slot.startMinutes}`}
+                            label={`Séance ${i + 1}`}
+                            value={`${slotLabel.dateLabel} · ${slotLabel.timeLabel}`}
+                          />
+                        );
+                      })}
                     <SummaryRow
                       label="Durée"
                       value={formatDurationLabel(duration)}
@@ -1184,8 +1210,9 @@ export default function BookingWizard({ studios, settings }: Props) {
                 paymentMethod={paymentMethod}
               />
             )}
-        </motion.div>
-      </AnimatePresence>
+          </motion.div>
+        </AnimatePresence>
+      </div>
     </div>
   );
 }
@@ -1195,34 +1222,64 @@ function parseDateString(date: string): Date {
   return new Date(y, m - 1, d);
 }
 
+function formatSelectedSlotLabel(
+  slot: BookingSlotInput,
+  durationMinutes: number,
+  options?: { compact?: boolean }
+): { dateLabel: string; timeLabel: string } {
+  const dateLabel = format(
+    parseDateString(slot.date),
+    options?.compact ? "d MMM yyyy" : "EEE d MMM yyyy",
+    { locale: fr }
+  );
+  const timeLabel = `${minutesToTimeString(slot.startMinutes)} – ${minutesToTimeString(
+    slot.startMinutes + durationMinutes
+  )}`;
+  return { dateLabel, timeLabel };
+}
+
+function BookStepHeader({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="book-step-header">
+      <div>
+        <h2 className="book-step-title">{title}</h2>
+        <p className="book-step-desc">{description}</p>
+      </div>
+    </div>
+  );
+}
+
 function StepIndicator({ current }: { current: number }) {
   const progress = (current / (STEPS.length - 1)) * 100;
 
   return (
-    <div className="mb-10 md:mb-12">
-      <div className="flex items-center justify-between gap-2 mb-3">
+    <div className="mb-8 md:mb-10 pb-6 border-b border-charcoal/[0.06]">
+      <div className="book-step-track">
         {STEPS.map((label, i) => {
           const done = i < current;
           const active = i === current;
           return (
-            <div
-              key={label}
-              className="flex-1 flex flex-col items-center gap-2 min-w-0"
-            >
+            <div key={label} className="book-step-item">
               <div
-                className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold transition-all duration-300 ${
+                className={`book-step-dot ${
                   done
-                    ? "bg-secondary-500 text-white shadow-md shadow-secondary-500/25"
+                    ? "book-step-dot--done"
                     : active
-                      ? "bg-primary-500 text-white shadow-md shadow-primary-500/30 scale-105"
-                      : "bg-white text-soft-charcoal border border-charcoal/10"
+                      ? "book-step-dot--active"
+                      : ""
                 }`}
               >
                 {done ? <Check className="w-4 h-4" aria-hidden /> : i + 1}
               </div>
               <span
-                className={`hidden sm:block text-[11px] font-semibold font-nav truncate max-w-full ${
-                  active || done ? "text-charcoal" : "text-soft-charcoal"
+                className={`book-step-label ${
+                  active || done ? "text-charcoal" : "book-step-label--muted"
                 }`}
               >
                 {label}
@@ -1231,9 +1288,9 @@ function StepIndicator({ current }: { current: number }) {
           );
         })}
       </div>
-      <div className="h-1.5 rounded-full bg-charcoal/5 overflow-hidden mx-4 sm:mx-8">
+      <div className="book-progress-track mt-4">
         <motion.div
-          className="h-full rounded-full bg-gradient-to-r from-primary-500 to-secondary-500"
+          className="book-progress-fill"
           initial={false}
           animate={{ width: `${progress}%` }}
           transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
@@ -1245,67 +1302,22 @@ function StepIndicator({ current }: { current: number }) {
 
 function SessionCountStep({
   mode,
-  multiCount,
-  onMultiCountChange,
   onSelect,
   onBack,
 }: {
   mode: SessionMode | null;
-  multiCount: number;
-  onMultiCountChange: (n: number) => void;
   onSelect: (mode: SessionMode) => void;
   onBack: () => void;
 }) {
   const [localMode, setLocalMode] = useState<SessionMode | null>(mode);
-  // Draft string so mobile users can type "10" without being clamped to 2 on the first digit.
-  const [countDraft, setCountDraft] = useState(String(multiCount));
-  const [countError, setCountError] = useState<string | null>(null);
-
-  function clampMultiCount(n: number) {
-    return Math.min(
-      MAX_MULTI_SESSIONS,
-      Math.max(MIN_MULTI_SESSIONS, Math.round(n))
-    );
-  }
-
-  function commitCountDraft(raw: string): number | null {
-    const trimmed = raw.trim();
-    if (trimmed === "") {
-      setCountError(
-        `Indiquez un nombre entre ${MIN_MULTI_SESSIONS} et ${MAX_MULTI_SESSIONS}.`
-      );
-      return null;
-    }
-    const n = Number(trimmed);
-    if (!Number.isFinite(n)) {
-      setCountError("Nombre invalide.");
-      return null;
-    }
-    const clamped = clampMultiCount(n);
-    setCountDraft(String(clamped));
-    setCountError(null);
-    onMultiCountChange(clamped);
-    return clamped;
-  }
-
-  const previewCount = (() => {
-    const n = Number(countDraft);
-    return Number.isFinite(n) && n >= MIN_MULTI_SESSIONS
-      ? clampMultiCount(n)
-      : multiCount;
-  })();
 
   return (
     <div className="space-y-5 max-w-3xl mx-auto">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h2 className="font-display font-bold text-xl text-charcoal tracking-tight">
-            Combien de séances ?
-          </h2>
-          <p className="text-sm text-soft-charcoal mt-1">
-            Une séance unique, ou plusieurs créneaux à choisir un par un.
-          </p>
-        </div>
+      <BookStepHeader
+        title="Choisissez votre formule"
+        description={`Une séance à la carte, ou un pack de ${PACK_SESSION_COUNT} créneaux avec remise.`}
+      />
+      <div className="flex justify-end -mt-4 mb-2">
         <button
           type="button"
           onClick={onBack}
@@ -1316,20 +1328,21 @@ function SessionCountStep({
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+      <motion.div
+        className="grid grid-cols-1 md:grid-cols-2 gap-5"
+        variants={staggerContainer}
+        initial="initial"
+        animate="animate"
+      >
         <motion.button
           type="button"
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35 }}
+          variants={staggerItem}
           onClick={() => {
             setLocalMode("single");
             onSelect("single");
           }}
-          className={`book-card text-left p-6 sm:p-8 group cursor-pointer transition-all duration-200 hover:-translate-y-1 ${
-            localMode === "single"
-              ? "ring-2 ring-primary-500 ring-offset-2"
-              : ""
+          className={`book-option-card ${
+            localMode === "single" ? "book-option-card--selected" : ""
           }`}
         >
           <div className="w-12 h-12 rounded-2xl bg-primary-50 text-primary-600 flex items-center justify-center mb-4">
@@ -1339,132 +1352,38 @@ function SessionCountStep({
             Une séance
           </h3>
           <p className="text-sm text-soft-charcoal leading-relaxed">
-            Réservez une date et une heure — le parcours classique.
+            Réservez une date et une heure — paiement au tarif normal (heure
+            pleine ou creuse).
           </p>
         </motion.button>
 
         <motion.button
           type="button"
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, delay: 0.08 }}
-          onClick={() => setLocalMode("multi")}
-          className={`book-card text-left p-6 sm:p-8 group cursor-pointer transition-all duration-200 hover:-translate-y-1 ${
-            localMode === "multi"
-              ? "ring-2 ring-primary-500 ring-offset-2"
-              : ""
+          variants={staggerItem}
+          onClick={() => {
+            setLocalMode("pack10");
+            onSelect("pack10");
+          }}
+          className={`book-option-card ${
+            localMode === "pack10" ? "book-option-card--selected" : ""
           }`}
         >
           <div className="w-12 h-12 rounded-2xl bg-secondary-50 text-secondary-600 flex items-center justify-center mb-4">
             <Sparkles className="w-6 h-6" />
           </div>
           <h3 className="font-display font-bold text-xl text-charcoal mb-2">
-            Plusieurs séances
+            Pack {PACK_SESSION_COUNT} séances
           </h3>
           <p className="text-sm text-soft-charcoal leading-relaxed">
-            Choisissez plusieurs dates et horaires.{" "}
+            Choisissez {PACK_SESSION_COUNT} créneaux d&apos;un coup.{" "}
             {regularCourseOfferLabel()}
           </p>
-        </motion.button>
-      </div>
-
-      {localMode === "multi" && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="book-card p-5 sm:p-6 space-y-4 border-secondary-100/80"
-        >
-          <Field label="Nombre de séances à réserver">
-            <div className="flex items-center gap-2 max-w-xs">
-              <button
-                type="button"
-                aria-label="Diminuer"
-                disabled={previewCount <= MIN_MULTI_SESSIONS}
-                onClick={() => {
-                  const next = clampMultiCount(previewCount - 1);
-                  setCountDraft(String(next));
-                  setCountError(null);
-                  onMultiCountChange(next);
-                }}
-                className="book-btn-ghost min-h-12 min-w-12 px-0 justify-center disabled:opacity-40"
-              >
-                −
-              </button>
-              <input
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                autoComplete="off"
-                value={countDraft}
-                onChange={(e) => {
-                  const raw = e.target.value.replace(/[^\d]/g, "");
-                  setCountDraft(raw);
-                  setCountError(null);
-                  const n = Number(raw);
-                  if (
-                    Number.isFinite(n) &&
-                    n >= MIN_MULTI_SESSIONS &&
-                    n <= MAX_MULTI_SESSIONS
-                  ) {
-                    onMultiCountChange(n);
-                  }
-                }}
-                onBlur={() => {
-                  commitCountDraft(countDraft);
-                }}
-                className="book-input min-h-12 text-center text-lg font-semibold tabular-nums"
-              />
-              <button
-                type="button"
-                aria-label="Augmenter"
-                disabled={previewCount >= MAX_MULTI_SESSIONS}
-                onClick={() => {
-                  const next = clampMultiCount(previewCount + 1);
-                  setCountDraft(String(next));
-                  setCountError(null);
-                  onMultiCountChange(next);
-                }}
-                className="book-btn-ghost min-h-12 min-w-12 px-0 justify-center disabled:opacity-40"
-              >
-                +
-              </button>
-            </div>
-          </Field>
-          {countError && (
-            <p className="text-xs font-medium text-rose-600">{countError}</p>
-          )}
-          <p className="text-xs text-soft-charcoal">
-            Entre {MIN_MULTI_SESSIONS} et {MAX_MULTI_SESSIONS} séances. Exemple :{" "}
-            {REGULAR_COURSE_MIN_COUNT} cours → vous payez{" "}
-            {REGULAR_COURSE_MIN_COUNT - 1}, le {REGULAR_COURSE_MIN_COUNT}
-            <sup>e</sup> est offert (les séances les moins chères).
+          <p className="mt-3 text-xs font-semibold text-secondary-700 bg-secondary-50 border border-secondary-100 rounded-lg px-3 py-2">
+            Vous payez {getPaidCoursesForPackage(PACK_SESSION_COUNT)} séances ·
+            1 offerte
           </p>
-          {previewCount >= REGULAR_COURSE_MIN_COUNT && (
-            <p className="text-sm font-medium text-secondary-700 bg-secondary-50 border border-secondary-100 rounded-xl px-3 py-2">
-              Forfait {previewCount} séances ·{" "}
-              {Math.floor(previewCount / REGULAR_COURSE_MIN_COUNT)} offerte
-              {Math.floor(previewCount / REGULAR_COURSE_MIN_COUNT) > 1
-                ? "s"
-                : ""}{" "}
-              · vous payez {getPaidCoursesForPackage(previewCount)}
-            </p>
-          )}
-          <div className="flex justify-end pt-1">
-            <button
-              type="button"
-              onClick={() => {
-                const committed = commitCountDraft(countDraft);
-                if (committed == null) return;
-                onSelect("multi");
-              }}
-              className="book-btn-primary min-h-12"
-            >
-              Continuer
-              <ArrowRight className="w-4 h-4" aria-hidden />
-            </button>
-          </div>
-        </motion.div>
-      )}
+        </motion.button>
+      </motion.div>
     </div>
   );
 }
@@ -1499,19 +1418,20 @@ function CourseTypeStep({
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-5 max-w-3xl mx-auto">
-      {options.map((opt, index) => (
+    <motion.div
+      className="grid grid-cols-1 md:grid-cols-2 gap-5 max-w-3xl mx-auto"
+      variants={staggerContainer}
+      initial="initial"
+      animate="animate"
+    >
+      {options.map((opt) => (
         <motion.button
           key={opt.type}
           type="button"
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, delay: index * 0.08 }}
+          variants={staggerItem}
           onClick={() => onSelect(opt.type)}
-          className={`book-card text-left p-6 sm:p-8 group cursor-pointer transition-all duration-200 hover:-translate-y-1 ${
-            selected === opt.type
-              ? "ring-2 ring-primary-500 ring-offset-2"
-              : ""
+          className={`book-option-card group ${
+            selected === opt.type ? "book-option-card--selected" : ""
           }`}
         >
           <div className="flex items-start justify-between gap-3 mb-4">
@@ -1536,7 +1456,7 @@ function CourseTypeStep({
           </span>
         </motion.button>
       ))}
-    </div>
+    </motion.div>
   );
 }
 
@@ -1559,15 +1479,16 @@ function StudioStep({
     getEffectiveStudioPrices(studio, courseType);
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between gap-3">
-        {courseType === "group" ? (
-          <p className="text-sm text-soft-charcoal">
-            Cours en groupe — choisissez votre studio.
-          </p>
-        ) : (
-          <span />
-        )}
+    <div className="space-y-6">
+      <BookStepHeader
+        title="Choisissez votre studio"
+        description={
+          courseType === "group"
+            ? "Cours en groupe — tous les studios disponibles."
+            : "Cours privé — Studio 3 avec tarifs réduits."
+        }
+      />
+      <div className="flex justify-end -mt-4">
         <button
           type="button"
           onClick={onBack}
@@ -1599,10 +1520,8 @@ function StudioStep({
               onSelect(studio);
             }
           }}
-          className={`book-card text-left overflow-hidden group cursor-pointer transition-all duration-200 hover:-translate-y-1 ${
-            selected?.id === studio.id
-              ? "ring-2 ring-primary-500 ring-offset-2 ring-offset-transparent"
-              : ""
+          className={`book-option-card overflow-hidden p-0 ${
+            selected?.id === studio.id ? "book-option-card--selected" : ""
           }`}
         >
           <div
@@ -1730,19 +1649,19 @@ function MonthCalendar({
           type="button"
           onClick={() => onMonthChange(addMonths(month, -1))}
           disabled={isSameMonth(month, today)}
-          className="min-w-11 min-h-11 flex items-center justify-center rounded-xl border border-charcoal/10 bg-white disabled:opacity-30 hover:bg-charcoal/[0.02] transition-colors duration-200 cursor-pointer"
+          className="book-cal-nav"
           aria-label="Mois précédent"
         >
           <ChevronLeft className="w-4 h-4" />
         </button>
-        <span className="font-semibold font-nav text-charcoal capitalize text-sm">
+        <span className="font-semibold font-nav text-charcoal capitalize text-sm px-2">
           {format(month, "MMMM yyyy", { locale: fr })}
         </span>
         <button
           type="button"
           onClick={() => onMonthChange(addMonths(month, 1))}
           disabled={!isBefore(startOfMonth(month), maxMonth)}
-          className="min-w-11 min-h-11 flex items-center justify-center rounded-xl border border-charcoal/10 bg-white disabled:opacity-30 hover:bg-charcoal/[0.02] transition-colors duration-200 cursor-pointer"
+          className="book-cal-nav"
           aria-label="Mois suivant"
         >
           <ChevronRight className="w-4 h-4" />
@@ -1774,16 +1693,16 @@ function MonthCalendar({
               type="button"
               disabled={disabled}
               onClick={() => onSelect(dateStr)}
-              className={`relative aspect-square min-h-10 rounded-xl text-sm font-semibold transition-all duration-200 ${
+              className={`book-cal-day ${
                 isSelected
-                  ? "bg-primary-500 text-white shadow-md shadow-primary-500/30"
+                  ? "book-cal-day--selected"
                   : disabled
-                    ? "text-charcoal/20 cursor-not-allowed"
+                    ? "book-cal-day--disabled"
                     : isMarked
-                      ? "text-secondary-700 bg-secondary-50 hover:bg-secondary-100 cursor-pointer ring-1 ring-secondary-200"
+                      ? "book-cal-day--marked"
                       : isToday
-                        ? "text-primary-600 bg-primary-50 hover:bg-primary-100 cursor-pointer"
-                        : "text-charcoal hover:bg-primary-50 cursor-pointer"
+                        ? "book-cal-day--today"
+                        : "book-cal-day--idle"
               }`}
             >
               {format(day, "d")}
@@ -1811,7 +1730,7 @@ function WizardNav({
   nextDisabled: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 pt-1">
+    <div className="flex items-center justify-between gap-3 pt-4 mt-2 border-t border-charcoal/[0.06]">
       <button type="button" onClick={onBack} className="book-btn-ghost min-h-12">
         <ArrowLeft className="w-4 h-4" aria-hidden />
         Retour
@@ -1863,10 +1782,8 @@ function PaymentOption({
     <button
       type="button"
       onClick={onClick}
-      className={`p-4 rounded-2xl border text-left transition-all duration-200 cursor-pointer min-h-[5.5rem] ${
-        selected
-          ? "border-primary-500 bg-primary-50/60 shadow-sm ring-1 ring-primary-500/30"
-          : "border-charcoal/8 bg-charcoal/[0.02] hover:border-primary-300 hover:bg-white"
+      className={`book-pay-option ${
+        selected ? "book-pay-option--selected" : ""
       }`}
     >
       <div
@@ -1902,7 +1819,7 @@ function MultiPackageBreakdown({
 }) {
   const paid = getPaidCoursesForPackage(b.packageCourseCount);
   return (
-    <div className="rounded-2xl bg-secondary-50/80 border border-secondary-100 px-4 py-3 space-y-1.5 text-sm">
+    <div className="book-panel-accent px-4 py-3.5 space-y-2 text-sm">
       <div className="flex justify-between gap-3 text-charcoal">
         <span>Sous-total {b.packageCourseCount} séances</span>
         <span className="font-semibold tabular-nums">
@@ -1963,9 +1880,11 @@ function ConfirmationStep({
         initial={{ opacity: 0, scale: 0.96 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-        className="book-card p-8 sm:p-10 text-center"
+        className="book-confirm"
       >
-        <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-secondary-50 text-secondary-600 flex items-center justify-center border border-secondary-100">
+        <div className="book-confirm-glow" aria-hidden />
+        <div className="relative">
+        <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-gradient-to-br from-secondary-50 to-primary-50 text-secondary-600 flex items-center justify-center border border-secondary-100/80 shadow-sm">
           <PartyPopper className="w-7 h-7" aria-hidden />
         </div>
         <h2 className="text-2xl sm:text-3xl font-display font-bold text-charcoal tracking-tight mb-2">
@@ -1985,9 +1904,18 @@ function ConfirmationStep({
             </>
           )}
         </p>
-        <div className="inline-block px-6 py-3 rounded-2xl bg-primary-50 text-primary-600 font-display font-bold text-2xl tracking-[0.12em] mb-7 border border-primary-100">
+        <div className="inline-block px-6 py-3 rounded-2xl bg-primary-50 text-primary-600 font-display font-bold text-2xl tracking-[0.12em] mb-3 border border-primary-100">
           {result.reference}
         </div>
+        <p className="text-sm text-soft-charcoal mb-7">
+          Page de suivi :{" "}
+          <Link
+            href={`/reservation/${result.reference}`}
+            className="font-semibold text-primary-600 hover:text-primary-500 underline underline-offset-2"
+          >
+            /reservation/{result.reference}
+          </Link>
+        </p>
         <div className="text-left space-y-3 border-t border-charcoal/5 pt-6">
           <SummaryRow
             label="Type"
@@ -2029,6 +1957,7 @@ function ConfirmationStep({
             label="Paiement"
             value={PAYMENT_METHOD_LABELS[paymentMethod]}
           />
+        </div>
         </div>
       </motion.div>
 
@@ -2072,13 +2001,13 @@ function ConfirmationStep({
       </div>
 
       <div className="text-center">
-        <a
+        <Link
           href={`/reservation/${result.reference}`}
           className="book-btn-primary inline-flex min-h-12"
         >
           Suivre ma réservation
           <ArrowRight className="w-4 h-4" aria-hidden />
-        </a>
+        </Link>
       </div>
     </div>
   );

@@ -28,7 +28,7 @@ export default async function AdminLayout({
       <div className="admin-shell">
         <AdminNav userEmail={user.email ?? ""} />
         <main className="lg:pl-80">
-          <div className="px-4 sm:px-6 lg:px-8 py-6 pt-20 lg:pt-6 lg:pr-6 min-h-screen">
+          <div className="px-4 sm:px-6 lg:px-8 py-6 pt-20 lg:pt-6 lg:pr-6 min-h-screen admin-scroll-area">
             {children}
           </div>
         </main>
