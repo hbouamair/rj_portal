@@ -1,6 +1,7 @@
 import type { Booking, Settings, Studio } from "./types";
 import { PAYMENT_METHOD_LABELS } from "./types";
 import { formatDurationLabel, formatMad, minutesToTimeString } from "./pricing";
+import { CONTACT_ADDRESS } from "@/lib/constants";
 
 /**
  * HTML emails for the booking flow. Inline styles only, same visual
@@ -88,7 +89,7 @@ function shell(title: string, tagline: string, bodyRows: string): string {
           <tr>
             <td style="padding: 24px 40px 32px; background-color: ${BRAND.cream}; border-top: 1px solid rgba(0,0,0,0.06); text-align: center;">
               <p style="margin: 0; font-size: 12px; color: ${BRAND.softCharcoal};">
-                RJ Studio · Rue Biranzarane, Casablanca · +212 661 77 74 21
+                RJ Studio · ${CONTACT_ADDRESS} · +212 661 77 74 21
               </p>
             </td>
           </tr>
@@ -153,7 +154,7 @@ function paymentInstructions(ctx: BookingEmailContext): string {
     const bank = escapeHtml(settings.bank_details ?? "").replace(/\n/g, "<br>");
     details = `Effectuez un virement bancaire avec les coordonnées suivantes :<br><br>${bank}<br><br>Indiquez votre référence <strong>${escapeHtml(booking.reference)}</strong> dans le motif du virement.`;
   } else {
-    details = `Vous avez choisi de payer en espèces au studio. Merci de passer régler votre réservation <strong>avant la date limite ci-dessous</strong> pour la confirmer.<br><br>Adresse : Rue Biranzarane, Casablanca.`;
+    details = `Vous avez choisi de payer en espèces au studio. Merci de passer régler votre réservation <strong>avant la date limite ci-dessous</strong> pour la confirmer.<br><br>Adresse : ${CONTACT_ADDRESS}.`;
   }
 
   const deadline = formatDeadlineFr(booking.payment_deadline);
@@ -287,7 +288,7 @@ export function getBookingClientReminderEmailHtml(
     (isPending ? paymentInstructions(ctx) : "") +
     card(
       `<p style="margin: 0 0 8px 0; font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: ${BRAND.softCharcoal};">Adresse</p>
-       <p style="margin: 0; font-size: 15px; line-height: 1.65; color: ${BRAND.charcoal};">RJ Studio · Rue Biranzarane, Casablanca<br>Tél. +212 661 77 74 21</p>`
+       <p style="margin: 0; font-size: 15px; line-height: 1.65; color: ${BRAND.charcoal};">RJ Studio · ${CONTACT_ADDRESS}<br>Tél. +212 661 77 74 21</p>`
     ) +
     trackingButton(ctx.trackingUrl);
   return shell(

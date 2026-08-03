@@ -24,6 +24,7 @@ import {
   formatMad,
   minutesToTimeString,
 } from "@/lib/booking/pricing";
+import { CONTACT_ADDRESS } from "@/lib/constants";
 
 const fadeUp = {
   initial: { opacity: 0, y: 20 },
@@ -231,8 +232,7 @@ export default function BookingTrackingView({
             )}
             {booking.payment_method === "cash" && (
               <p>
-                Passez régler votre réservation en espèces au studio (Rue
-                Biranzarane, Casablanca) avant la date limite.
+                Passez régler votre réservation en espèces au studio ({CONTACT_ADDRESS}) avant la date limite.
               </p>
             )}
             <p className="font-semibold text-accent-500">
@@ -252,7 +252,7 @@ export default function BookingTrackingView({
         >
           <p className="text-sm text-charcoal leading-relaxed">
             Votre paiement a bien été reçu — votre réservation est confirmée.
-            Nous vous attendons au studio, Rue Biranzarane, Casablanca. À très
+            Nous vous attendons au studio, {CONTACT_ADDRESS}. À très
             bientôt !
           </p>
         </motion.div>

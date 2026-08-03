@@ -1,23 +1,20 @@
-"use client";
-
 import Navigation from "@/components/Navigation";
 import Contact from "@/components/Contact";
 import Footer from "@/components/Footer";
+import { fetchContactContent } from "@/lib/site-content/db";
 
-export default function ContactPage() {
+export const dynamic = "force-dynamic";
+
+export default async function ContactPage() {
+  const content = await fetchContactContent();
+
   return (
     <>
-      {/* Navigation */}
       <Navigation />
-      
-      {/* Main Content */}
       <main className="relative">
-        <Contact />
+        <Contact content={content} />
       </main>
-      
-      {/* Footer */}
       <Footer />
     </>
   );
 }
-

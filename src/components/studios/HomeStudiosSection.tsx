@@ -28,8 +28,7 @@ export default async function HomeStudiosSection() {
             Nos studios
           </p>
           <h2 className="text-3xl md:text-5xl font-display font-bold text-charcoal mb-4">
-            Réservez votre{" "}
-            <span className="text-[#F2E7AF]">espace</span>
+            Réservez votre espace
           </h2>
           <p className="text-base md:text-lg text-soft-charcoal leading-relaxed">
             Location à l&apos;heure — cours privés, répétitions ou ateliers.

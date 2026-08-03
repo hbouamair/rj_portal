@@ -6,6 +6,7 @@ import {
 } from "./types";
 import { minutesToTimeString } from "./pricing";
 import { getPackageGroupKey } from "./package-groups";
+import { CONTACT_ADDRESS } from "@/lib/constants";
 
 function isPackageBooking(b: BookingWithStudio): boolean {
   return (
@@ -110,7 +111,7 @@ function applyPageSetup(
   };
   sheet.headerFooter = {
     oddHeader: "&L&B RJ Studio&R&D",
-    oddFooter: "&LRue Biranzarane, Casablanca&C&P / &N&RExport Excel",
+    oddFooter: `&L${CONTACT_ADDRESS}&C&P / &N&RExport Excel`,
   };
   sheet.properties.defaultRowHeight = 20;
   sheet.properties.tabColor = { argb: COLORS.accent };
@@ -375,7 +376,7 @@ function fillBookingsSheet(
   const footerRow = 4 + bookings.length;
   sheet.mergeCells(footerRow, 1, footerRow, lastCol);
   const footer = sheet.getCell(footerRow, 1);
-  footer.value = "RJ Studio · Rue Biranzarane, Casablanca";
+  footer.value = `RJ Studio · ${CONTACT_ADDRESS}`;
   footer.font = {
     name: "Calibri",
     size: 9,

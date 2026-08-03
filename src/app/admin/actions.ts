@@ -31,6 +31,11 @@ import {
   sendBookingConfirmedEmail,
   sendBookingReceivedEmail,
 } from "@/lib/booking/emails";
+import type {
+  AboutPageContent,
+  ContactPageContent,
+  SitePageSlug,
+} from "@/lib/site-content/types";
 
 export interface ActionResult {
   ok: boolean;
@@ -738,5 +743,67 @@ export async function fetchBookingsForExportDay(
       ok: false,
       error: err instanceof Error ? err.message : "Erreur",
     };
+  }
+}
+
+function trimOrEmpty(value: string): string {
+  return value.trim();
+}
+
+function validateContactContent(input: ContactPageContent): string | null {
+  if (!trimOrEmpty(input.pageTitle)) return "Le titre de la page contact est requis.";
+  if (!trimOrEmpty(input.email)) return "L'email contact est requis.";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email.trim())) {
+    return "Email contact invalide.";
+  }
+  if (!trimOrEmpty(input.address)) return "L'adresse est requise.";
+  if (!trimOrEmpty(input.phone)) return "Le téléphone est requis.";
+  return null;
+}
+
+function validateAboutContent(input: AboutPageContent): string | null {
+  if (!trimOrEmpty(input.titlePrefix)) return "Le titre À propos est requis.";
+  if (!trimOrEmpty(input.titleHighlight)) return "Le sous-titre mis en avant est requis.";
+  if (!input.conceptParagraphs.some((p) => p.trim())) {
+    return "Ajoutez au moins un paragraphe pour « Notre concept ».";
+  }
+  return null;
+}
+
+export async function updateSitePageContent(
+  slug: SitePageSlug,
+  content: ContactPageContent | AboutPageContent
+): Promise<ActionResult> {
+  try {
+    await requireAdmin();
+
+    if (slug === "contact") {
+      const err = validateContactContent(content as ContactPageContent);
+      if (err) return { ok: false, error: err };
+    } else {
+      const err = validateAboutContent(content as AboutPageContent);
+      if (err) return { ok: false, error: err };
+    }
+
+    const supabase = getSupabaseAdmin();
+    const payload = {
+      slug,
+      content,
+      updated_at: new Date().toISOString(),
+    };
+    const { error } = await supabase.from("site_pages").upsert(payload, {
+      onConflict: "slug",
+    });
+    if (error) throw new Error(error.message);
+
+    revalidatePath("/admin/content");
+    revalidatePath("/contact");
+    revalidatePath("/about");
+    revalidatePath("/preview/contact");
+    revalidatePath("/preview/about");
+
+    return { ok: true, message: "Contenu enregistré." };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Erreur" };
   }
 }

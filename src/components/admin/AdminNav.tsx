@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   BarChart3,
   CalendarDays,
+  FileText,
   LogOut,
   Menu,
   Music,
@@ -21,6 +22,7 @@ const LINKS = [
   { href: "/admin/studios", label: "Studios", icon: Music, hint: "Tarifs & salles" },
   { href: "/admin/promo-codes", label: "Codes promo", icon: Tag, hint: "Réductions clients" },
   { href: "/admin/income", label: "Revenus", icon: TrendingUp, hint: "Chiffre d'affaires" },
+  { href: "/admin/content", label: "Contenu site", icon: FileText, hint: "Contact & à propos" },
   { href: "/admin/settings", label: "Paramètres", icon: Settings, hint: "Horaires & paiements" },
 ];
 

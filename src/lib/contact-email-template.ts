@@ -1,3 +1,5 @@
+import { CONTACT_ADDRESS } from "@/lib/constants";
+
 /**
  * Beautiful HTML email template for contact form submissions.
  * Inline styles only for maximum email client compatibility.
@@ -131,7 +133,7 @@ export function getContactEmailHtml(data: ContactEmailData): string {
           <tr>
             <td style="padding: 24px 40px 32px; background-color: ${BRAND.cream}; border-top: 1px solid rgba(0,0,0,0.06); text-align: center;">
               <p style="margin: 0; font-size: 12px; color: ${BRAND.softCharcoal};">
-                Envoyé depuis le formulaire de contact · RJ Studio · Rue Biranzarane, Casablanca
+                Envoyé depuis le formulaire de contact · RJ Studio · ${CONTACT_ADDRESS}
               </p>
             </td>
           </tr>

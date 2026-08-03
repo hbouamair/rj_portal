@@ -59,6 +59,7 @@ import {
 } from "@/lib/booking/discounts";
 import { getStudioImages } from "@/lib/booking/studio-images";
 import StudioImageCarousel from "@/components/studios/StudioImageCarousel";
+import { CONTACT_ADDRESS } from "@/lib/constants";
 
 interface Props {
   studios: Studio[];
@@ -1990,7 +1991,7 @@ function ConfirmationStep({
           )}
           {paymentMethod === "cash" && (
             <p>
-              Passez régler en espèces au studio (Rue Biranzarane, Casablanca)
+              Passez régler en espèces au studio ({CONTACT_ADDRESS})
               avant la date limite.
             </p>
           )}

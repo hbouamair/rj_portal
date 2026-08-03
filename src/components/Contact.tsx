@@ -3,18 +3,19 @@
 import { motion } from "framer-motion";
 import { MapPin, Phone, Mail, Clock, Send, Loader2 } from "lucide-react";
 import { useState } from "react";
-import {
-  CONTACT_ADDRESS,
-  CONTACT_EMAIL,
-  CONTACT_PHONE_DISPLAY,
-  OPENING_HOURS_DISPLAY,
-} from "@/lib/constants";
+import type { ContactPageContent } from "@/lib/site-content/types";
+import { DEFAULT_CONTACT_CONTENT } from "@/lib/site-content/defaults";
 
-const GOOGLE_MAPS_EMBED = `https://www.google.com/maps?q=${encodeURIComponent("rue biranzarane casablanca")}&output=embed`;
-
-export default function Contact() {
+export default function Contact({
+  content = DEFAULT_CONTACT_CONTENT,
+}: {
+  content?: ContactPageContent;
+}) {
   const [formState, setFormState] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState<string>("");
+
+  const mapEmbed = `https://www.google.com/maps?q=${encodeURIComponent(content.mapQuery)}&output=embed`;
+  const mapLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(content.mapQuery)}`;
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -72,10 +73,10 @@ export default function Contact() {
             Contact
           </p>
           <h1 className="text-4xl sm:text-5xl md:text-6xl font-display font-bold text-charcoal tracking-tight">
-            Venez nous voir
+            {content.pageTitle}
           </h1>
           <p className="mt-4 text-lg text-soft-charcoal max-w-2xl mx-auto font-body">
-            Rue Biranzarane, Casablanca — Réservez ou posez vos questions.
+            {content.pageSubtitle}
           </p>
         </motion.div>
 
@@ -90,8 +91,8 @@ export default function Contact() {
           >
             <div className="relative rounded-3xl overflow-hidden shadow-2xl shadow-black/10 ring-1 ring-black/5 h-[320px] sm:h-[380px] lg:h-full min-h-[320px]">
               <iframe
-                src={GOOGLE_MAPS_EMBED}
-                title="RJ Studio - Rue Biranzarane, Casablanca"
+                src={mapEmbed}
+                title={`RJ Studio - ${content.address}`}
                 className="absolute inset-0 w-full h-full border-0"
                 allowFullScreen
                 loading="lazy"
@@ -125,11 +126,11 @@ export default function Contact() {
                     </div>
                     <div>
                     <p className="text-xs font-medium text-white/80 uppercase tracking-wider font-nav">Adresse</p>
-                    <p className="font-semibold font-body">{CONTACT_ADDRESS}</p>
+                    <p className="font-semibold font-body">{content.address}</p>
                     </div>
                   </div>
                   <a
-                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent("rue biranzarane casablanca")}`}
+                    href={mapLink}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-sm font-medium text-white/90 hover:text-white underline underline-offset-2 font-body"
@@ -160,10 +161,10 @@ export default function Contact() {
 
               <div className="relative">
                 <h2 className="text-2xl sm:text-3xl font-display font-bold text-charcoal mb-1">
-                  Envoyez un message
+                  {content.formTitle}
                 </h2>
                 <p className="text-soft-charcoal text-sm sm:text-base mb-6 font-body">
-                  Réponse sous 24h en général.
+                  {content.formSubtitle}
                 </p>
 
                 {formState === "sent" ? (
@@ -244,7 +245,7 @@ export default function Contact() {
                         id="phone"
                         name="phone"
                         type="tel"
-                        placeholder={CONTACT_PHONE_DISPLAY}
+                        placeholder={content.phone}
                         className="contact-input w-full px-5 py-4 rounded-2xl border-2 border-black/8 bg-white/70 backdrop-blur-sm text-charcoal placeholder:text-soft-charcoal/50 focus:border-primary-500 focus:bg-white focus:shadow-[0_0_0_4px_rgba(30,58,95,0.08)] outline-none transition-all duration-300 font-body"
                       />
                     </motion.div>
@@ -318,10 +319,10 @@ export default function Contact() {
           transition={{ duration: 0.6, delay: 0.4 }}
         >
           {[
-            { icon: MapPin, label: "Adresse", value: CONTACT_ADDRESS },
-            { icon: Phone, label: "Téléphone", value: CONTACT_PHONE_DISPLAY },
-            { icon: Mail, label: "Email", value: CONTACT_EMAIL },
-            { icon: Clock, label: "Horaires", value: OPENING_HOURS_DISPLAY },
+            { icon: MapPin, label: "Adresse", value: content.address },
+            { icon: Phone, label: "Téléphone", value: content.phone },
+            { icon: Mail, label: "Email", value: content.email },
+            { icon: Clock, label: "Horaires", value: content.openingHours },
           ].map((item) => (
             <div
               key={item.label}

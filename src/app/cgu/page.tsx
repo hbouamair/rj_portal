@@ -4,7 +4,7 @@ import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import Link from "next/link";
 import { ArrowLeft, ScrollText } from "lucide-react";
-import { BASE_PATH, CONTACT_EMAIL, CONTACT_PHONE_DISPLAY, HOME_URL } from "@/lib/constants";
+import { BASE_PATH, CONTACT_ADDRESS, CONTACT_EMAIL, CONTACT_PHONE_DISPLAY, HOME_URL } from "@/lib/constants";
 
 export default function CGUPage() {
   return (
@@ -42,8 +42,8 @@ export default function CGUPage() {
               </h2>
               <p className="leading-relaxed">
                 Les présentes Conditions générales d&apos;utilisation (CGU) régissent l&apos;accès et l&apos;utilisation de la
-                <strong> location de studios</strong> proposée par <strong>RJ Studio</strong>, situé Rue Biranzarane,
-                Casablanca. En réservant un studio ou en utilisant nos services, vous acceptez sans réserve les présentes CGU.
+                <strong> location de studios</strong> proposée par <strong>RJ Studio</strong>, situé {CONTACT_ADDRESS}.
+                En réservant un studio ou en utilisant nos services, vous acceptez sans réserve les présentes CGU.
               </p>
             </section>
 

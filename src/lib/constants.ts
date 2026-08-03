@@ -19,7 +19,10 @@ export const WHATSAPP_NUMBER = "212661777421";
 export const CONTACT_PHONE_DISPLAY = "+212 661 77 74 21";
 export const CONTACT_PHONE_TEL = "+212661777421";
 export const CONTACT_EMAIL = "contact@studiorj.ma";
-export const CONTACT_ADDRESS = "Rue Biranzarane, Casablanca";
+export const CONTACT_ADDRESS =
+  "Angle rue Ennahas Annahoui et rue Al Khalil, Maarif, Casablanca";
+/** Google Maps query — lat,lng for precise pin */
+export const CONTACT_MAP_QUERY = "33.580389,-7.635439";
 export const OPENING_HOURS_DISPLAY = "Lun-Dim · 8h-22h";
 
 /** RJ Studio on Instagram */

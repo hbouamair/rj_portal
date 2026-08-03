@@ -4,7 +4,7 @@ import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import Link from "next/link";
 import { ArrowLeft, FileText } from "lucide-react";
-import { BASE_PATH, CONTACT_EMAIL, CONTACT_PHONE_DISPLAY, HOME_URL } from "@/lib/constants";
+import { BASE_PATH, CONTACT_ADDRESS, CONTACT_EMAIL, CONTACT_PHONE_DISPLAY, HOME_URL } from "@/lib/constants";
 
 export default function PreviewMentionsLegalesPage() {
   return (
@@ -35,7 +35,7 @@ export default function PreviewMentionsLegalesPage() {
                 Le site <strong>www.rjstudio.ma</strong> est édité par <strong>RJ Studio</strong>, studio de danse et location de studios situé à Casablanca, Maroc.
               </p>
               <p className="leading-relaxed mt-3">
-                Adresse : Rue Biranzarane, Casablanca.<br />
+                Adresse : {CONTACT_ADDRESS}.<br />
                 Téléphone : {CONTACT_PHONE_DISPLAY}<br />
                 Email : {CONTACT_EMAIL}
               </p>
