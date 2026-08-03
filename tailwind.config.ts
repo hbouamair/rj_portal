@@ -11,6 +11,7 @@ const config: Config = {
     extend: {
       colors: {
         cream: "#FDFBF7",
+        "warm-gold": "#F2E7AF",
         charcoal: "#1A1A1A",
         "soft-charcoal": "#4A4A4A",
         // Primary color palette - Deep Ocean Blue (Elegant & Professional)

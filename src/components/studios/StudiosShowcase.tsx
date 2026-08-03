@@ -97,7 +97,7 @@ export default function StudiosShowcase({
       >
         <motion.p
           variants={heroItem}
-          className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/80 border border-charcoal/5 text-[11px] font-bold uppercase tracking-[0.16em] text-soft-charcoal mb-5 shadow-sm"
+          className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-warm-gold/55 border border-warm-gold text-[11px] font-bold uppercase tracking-[0.16em] text-charcoal mb-5 shadow-sm"
         >
           Nos espaces
         </motion.p>

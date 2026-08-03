@@ -3,7 +3,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { Plus, Minus, HelpCircle } from "lucide-react";
 import { useState } from "react";
-import { BASE_PATH, CONTACT_PHONE_DISPLAY } from "@/lib/constants";
+import { BASE_PATH } from "@/lib/constants";
 
 const faqs = [
   {
@@ -21,10 +21,6 @@ const faqs = [
   {
     question: "Puis-je annuler ma réservation ?",
     answer: "Annulation gratuite jusqu'à 72 h avant la session. Entre 24 h et 72 h avant la session : 50 % du montant retenu. Moins de 24 h avant la session : aucun remboursement."
-  },
-  {
-    question: "Comment réserver un studio à la demi-journée ou à la journée ?",
-    answer: `Les réservations à la demi-journée ou à la journée se font uniquement sur devis.\n\nMerci de nous contacter par téléphone ou WhatsApp : ${CONTACT_PHONE_DISPLAY}.`
   }
 ];
 

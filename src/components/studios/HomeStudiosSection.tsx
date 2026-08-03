@@ -19,19 +19,17 @@ export default async function HomeStudiosSection() {
   return (
     <section
       id="studios-selection"
-      className="relative py-16 md:py-24 bg-cream content-auto"
+      className="relative py-16 md:py-24 bg-gradient-to-b from-cream via-warm-gold/25 to-cream content-auto"
     >
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 2xl:px-10 2xl:max-w-8xl">
         <header className="max-w-3xl mx-auto text-center mb-12 md:mb-14">
-          <p className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white border border-charcoal/5 text-[11px] font-bold uppercase tracking-[0.16em] text-soft-charcoal mb-4">
+          <p className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-warm-gold/60 border border-warm-gold text-[11px] font-bold uppercase tracking-[0.16em] text-charcoal mb-4">
             <Music className="w-3.5 h-3.5 text-primary-500" aria-hidden />
             Nos studios
           </p>
           <h2 className="text-3xl md:text-5xl font-display font-bold text-charcoal mb-4">
             Réservez votre{" "}
-            <span className="bg-gradient-to-r from-primary-500 to-secondary-500 bg-clip-text text-transparent">
-              espace
-            </span>
+            <span className="text-[#F2E7AF]">espace</span>
           </h2>
           <p className="text-base md:text-lg text-soft-charcoal leading-relaxed">
             Location à l&apos;heure — cours privés, répétitions ou ateliers.

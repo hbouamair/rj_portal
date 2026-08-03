@@ -23,7 +23,7 @@ const features = [
   {
     icon: Package,
     title: "FORMULES AVANTAGEUSES",
-    description: "Bénéficiez de tarifs dégressifs avec nos packs de 5 ou 10 heures. Plus vous dansez, plus vous économisez."
+    description: "Bénéficiez d'1 heure de location gratuite à l'achat de notre pack de 10 heures. Plus vous louez, plus vous économisez."
   },
   {
     icon: Users,
@@ -74,11 +74,7 @@ export default function WhyChooseUs() {
         >
           {/* Badge */}
           <motion.div
-            className="inline-flex items-center gap-2 px-5 py-2 rounded-full backdrop-blur-md mb-4 sm:mb-6"
-            style={{
-              background: 'rgba(255, 255, 255, 0.15)',
-              border: '1px solid rgba(255, 255, 255, 0.3)'
-            }}
+            className="inline-flex items-center gap-2 px-5 py-2 rounded-full backdrop-blur-md mb-4 sm:mb-6 bg-white/15 border border-white/30"
             initial={{ opacity: 0, scale: 0.8, y: -20 }}
             whileInView={{ opacity: 1, scale: 1, y: 0 }}
             viewport={{ once: true }}
@@ -92,29 +88,34 @@ export default function WhyChooseUs() {
           
           {/* Title with modern typography */}
           <motion.h2 
-            className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-display font-extrabold text-white mb-6 sm:mb-8 px-4 leading-tight"
+            className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-display font-extrabold mb-6 sm:mb-8 px-4 leading-tight"
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.6, delay: 0.3 }}
-            style={{
-              textShadow: '0 4px 20px rgba(0,0,0,0.3), 0 2px 10px rgba(0,0,0,0.2)'
-            }}
           >
-            <span className="relative inline-block">
-              <span className="bg-clip-text text-transparent bg-gradient-to-r from-white via-white/90 to-white">
-                POURQUOI CHOISIR
+            <span
+              className="text-white"
+              style={{ textShadow: "0 4px 20px rgba(0,0,0,0.45), 0 2px 10px rgba(0,0,0,0.35)" }}
+            >
+              POURQUOI CHOISIR
+            </span>
+            <br />
+            <span className="relative inline-block mt-1">
+              <span
+                className="text-[#F2E7AF]"
+                style={{ textShadow: "0 4px 24px rgba(0,0,0,0.5), 0 2px 8px rgba(0,0,0,0.4)" }}
+              >
+                RJ STUDIO?
               </span>
               <motion.div
-                className="absolute -bottom-2 left-0 right-0 h-1.5 bg-white/30 rounded-full"
+                className="absolute -bottom-2 left-0 right-0 h-1.5 bg-warm-gold rounded-full"
                 initial={{ scaleX: 0 }}
                 whileInView={{ scaleX: 1 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.8, delay: 0.8 }}
               />
             </span>
-            <br />
-            <span className="text-white">RJ STUDIO?</span>
           </motion.h2>
         </motion.div>
         

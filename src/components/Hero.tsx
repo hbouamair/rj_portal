@@ -22,13 +22,13 @@ export default function Hero() {
       {/* Media layer: poster first (LCP), video fades in on top when ready */}
       <div className="absolute inset-0 overflow-hidden">
         <Image
-          src="/studio-image.jpg"
-          alt="Studio de danse RJ Studio à Casablanca"
+          src="/hero-background.png"
+          alt="Studio RJ à Casablanca — salle lumineuse avec miroirs et logo"
           fill
           priority
           fetchPriority="high"
           sizes="100vw"
-          className="object-cover object-[center_42%]"
+          className="object-cover object-center"
           quality={85}
         />
         <HeroVideo />
@@ -43,12 +43,12 @@ export default function Hero() {
           aria-hidden
         />
 
-        {/* Scrim — heavier bottom-left for headline legibility */}
+        {/* Scrim — vignette + bottom-left shadow for text legibility */}
         <div
           className="absolute inset-0 pointer-events-none"
           style={{
             background:
-              "linear-gradient(180deg, rgba(10,16,28,0.15) 0%, rgba(10,16,28,0.05) 40%, rgba(10,16,28,0.35) 72%, rgba(10,16,28,0.72) 100%), linear-gradient(90deg, rgba(10,16,28,0.55) 0%, rgba(10,16,28,0.08) 50%)",
+              "radial-gradient(ellipse 110% 85% at 50% 45%, transparent 35%, rgba(10,16,28,0.3) 100%), linear-gradient(180deg, rgba(10,16,28,0.22) 0%, rgba(10,16,28,0.08) 38%, rgba(10,16,28,0.42) 70%, rgba(10,16,28,0.78) 100%), linear-gradient(90deg, rgba(10,16,28,0.62) 0%, rgba(10,16,28,0.12) 52%)",
           }}
           aria-hidden
         />
@@ -87,7 +87,10 @@ export default function Hero() {
               Chaque projet
               <br />
               mérite{" "}
-              <span className="bg-gradient-to-r from-secondary-300 to-secondary-500 bg-clip-text text-transparent">
+              <span
+                className="text-[#F2E7AF]"
+                style={{ textShadow: "0 4px 24px rgba(0,0,0,0.55)" }}
+              >
                 son espace.
               </span>
             </h1>
@@ -96,7 +99,7 @@ export default function Hero() {
               className="mt-5 text-base sm:text-lg text-white/85 font-medium max-w-md leading-relaxed animate-fade-up stagger-2"
               style={{ textShadow: "0 1px 12px rgba(0,0,0,0.45)" }}
             >
-              Studios de danse et bien-être à la location à Casablanca — à
+              Studios de danse et fitness à la location à Casablanca — à
               l&apos;heure, sans engagement.
             </p>
 

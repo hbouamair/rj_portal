@@ -12,6 +12,7 @@ const BRAND = {
   secondary: "#2A9D8F",
   accent: "#E76F51",
   cream: "#FDFBF7",
+  warmGold: "#F2E7AF",
   charcoal: "#2D2D2D",
   softCharcoal: "#5C5C5C",
 };
