@@ -297,6 +297,7 @@ function StudioCard({
             aspectClassName="h-full min-h-[280px]"
             priority={index === 0}
             rounded={false}
+            autoPlay
           />
           <div className="absolute inset-0 bg-gradient-to-t from-charcoal/50 via-transparent to-transparent md:bg-gradient-to-r md:from-charcoal/40 md:via-transparent pointer-events-none" />
           {studio.popular && (
